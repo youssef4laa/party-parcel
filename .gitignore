@@ -53,6 +53,10 @@ next-env.d.ts
 /export/
 /export-site/dist/
 
+# npm run backup's default destination is outside the repo entirely (../party-parcel-backups) —
+# this only matters if `--out` is ever pointed inside the repo instead.
+/backups/
+
 # Playwright
 /test-results/
 /playwright-report/

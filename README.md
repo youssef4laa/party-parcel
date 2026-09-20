@@ -93,7 +93,76 @@ from the same browser; nobody else can.
 
 Once every contributor has placed their box, either keep sharing the live links (the room stays
 usable at those URLs indefinitely), or bake a sealed, offline copy to hand the celebrant as a
-keepsake — see the next section.
+keepsake — see "Filling the room" and "Static export" below.
+
+## Filling the room
+
+The exact sequence for actually running a party with what's built so far, start to finish.
+
+1. **Create the room and set the event date.** The event date can only be set at creation time —
+   there's no edit-room UI yet (Milestone 7, see [HANDOFF.md](HANDOFF.md)). Decide the real
+   date/time up front:
+   ```bash
+   curl -X POST http://localhost:3000/api/dev/seed-room \
+     -H "Content-Type: application/json" \
+     -d '{"celebrantName":"Alex","age":25,"eventAt":"2026-06-15T18:00:00.000Z"}'
+   ```
+   Save the three links from the response (see "Share the right link with the right people"
+   above). If you really need to change the date on a room that already exists, `npx prisma
+   studio` (Prisma's own admin UI, not something this project built or tested) can edit the
+   `eventAt` column directly — there's no in-app way to do it yet.
+
+2. **Add boxes.** Send the contribute link to friends. Each one packs goodies (Pack), designs the
+   box (Design), then drags it into the room (Place) — no sign-up, no limit beyond the per-box/
+   per-room size caps below.
+
+3. **Unlock early for local testing.** Open the admin link, click "Unlock early" in the Host
+   panel (or `POST /api/rooms/<adminToken>/unlock` directly). This is permanent for that room —
+   only use it on a throwaway test room, not the one you're actually sending, unless you mean to
+   open it before the real date.
+
+4. **Back up before anything risky** (re-exporting, testing unlock, running migrations, etc.):
+   ```bash
+   npm run backup
+   ```
+   Copies `prisma/dev.db` and `.data/uploads` to a timestamped folder next to the repo (default
+   `../party-parcel-backups/<timestamp>`; override with `--out <dir>`) and prints exactly where
+   it went. This is the only copy of anything friends uploaded — neither file is tracked by git.
+
+5. **Export** once every contributor has placed their box — see "Static export" below for the
+   full picture (encryption, subpath-safety, deploying it):
+   ```bash
+   npm run export:gift -- --admin <adminToken> --password "a strong password" --out ./export/my-room
+   ```
+
+6. **Re-export** if a box was added or changed after the first export — run the same command
+   again. It's not incremental: the whole output folder is wiped and rebuilt from the room's
+   *current* state every time. If you already deployed an earlier export somewhere, redeploy the
+   new output too — the two copies aren't linked once they're out the door.
+
+### Size limits, and how to raise them
+
+All enforced server-side; the UI's live counters just mirror these numbers. Set in `.env` (see
+`.env.example`) — changing one needs a dev-server restart (`npm run dev`) or a rebuild
+(`npm run build`), since Next.js inlines `NEXT_PUBLIC_*` vars into the client bundle at build time,
+not read at runtime.
+
+| Env var | Default | What it caps |
+|---|---|---|
+| `NEXT_PUBLIC_MAX_GOODIES_PER_BOX` | 25 | goodies per box |
+| `NEXT_PUBLIC_MAX_BYTES_PER_BOX` | 25 MB | total goodie bytes per box |
+| `NEXT_PUBLIC_MAX_BYTES_PER_ROOM` | 200 MB | total goodie bytes across the whole room |
+| `NEXT_PUBLIC_MAX_PHOTO_BYTES` | 10 MB | one photo upload |
+| `NEXT_PUBLIC_MAX_VIDEO_UPLOAD_BYTES` | 20 MB | one video/voice/song file upload |
+| `NEXT_PUBLIC_MAX_VOICE_SECONDS` | 180 (3 min) | one voice recording's length |
+
+The brief's own numbers (50 goodies / 500 MB per box) are the "paid tier" reference —
+`RECOMMENDED_PAID_TIER` in `src/config/limits.ts` — raise the env vars to those, or higher, for a
+bigger room.
+
+Two more caps exist but aren't env-configurable yet (a code change, not just a setting, would be
+needed): `MAX_BOXES_PER_ROOM` and `MAX_PHOTOBOOTH_SHOTS_PER_ROOM`, both 100, hardcoded in
+`src/server/limits.ts`.
 
 ## Static export: `npm run export:gift`
 
