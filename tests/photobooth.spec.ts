@@ -8,7 +8,9 @@ const ROOM_HEIGHT = 760;
  * goes through countdown/flash/review, the shot lands on the in-room photo wall, and the shot's
  * owner can delete it. Also checks the role-openness decision (any room link, not just
  * contribute) and that the shared upload route's broadened gate didn't accidentally open up
- * goodie uploads to non-contribute roles too.
+ * goodie uploads to non-contribute roles too. Runs under both `chromium` (Chromium's
+ * fake-device flags) and `safari` (real WebKit, whose own built-in mock capture devices need no
+ * special flags) — gift-readiness pass, "Chrome and Safari/iOS".
  */
 test.describe('photobooth', () => {
   let admin: string;

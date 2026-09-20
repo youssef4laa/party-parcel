@@ -29,4 +29,10 @@ export function sniffMime(buf: Buffer): string | null {
 
 export const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic'];
 export const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm'];
-export const ALLOWED_AUDIO_TYPES = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'video/webm'];
+// 'video/webm' (not a typo): the WebM container signature is identical for audio-only and
+// audio+video content, so sniffMime() always reports 'video/webm' regardless — that's the value
+// checked at finalize time. 'audio/webm' is what a real MediaRecorder reports as the Blob's own
+// type (see api.ts's uploadFile, which also strips any ';codecs=...' suffix) — that's the value
+// checked at upload-init time, before any bytes exist to sniff. Both need to be here since both
+// phases check the same allowlist against different inputs.
+export const ALLOWED_AUDIO_TYPES = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/webm', 'video/webm'];

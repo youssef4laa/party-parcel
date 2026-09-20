@@ -90,10 +90,17 @@ export type UploadKind = 'photo' | 'drawing' | 'video' | 'voice' | 'song' | 'pho
  * presigned URL — see src/server/storage.
  */
 export async function uploadFile(token: string, file: File, kind: UploadKind = 'photo') {
+  // A live MediaRecorder's Blob.type carries codec parameters the server's allowlist doesn't
+  // (and shouldn't need to) know about, e.g. 'audio/webm;codecs=opus' — strip them for the
+  // init-phase type check. Harmless to strip generally: the actual PUT request below still sends
+  // the full file.type as its Content-Type header, and the server never reads that header at all
+  // (only the signed query param, which is derived from this same stripped value) — the real
+  // content type is re-sniffed from the actual bytes at finalize time regardless.
+  const contentType = file.type.split(';')[0].trim();
   const init = await fetch(`/api/rooms/${token}/uploads`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ kind, contentType: file.type }),
+    body: JSON.stringify({ kind, contentType }),
   });
   const { uploadUrl, key } = await asJson<{ uploadUrl: string; key: string; maxBytes: number }>(init);
 
