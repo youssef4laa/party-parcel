@@ -1,0 +1,130 @@
+// Party Parcel data model (section 10 of the brief).
+// Dev datasource is SQLite for a zero-setup `npm run dev` (see DECISIONS.md).
+// Swapping to Postgres for production is a datasource + DATABASE_URL change only —
+// nothing here uses SQLite-only features.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum RoomMode {
+  room
+  solo
+}
+
+enum RoomStatus {
+  draft
+  live
+  deleted
+}
+
+model Room {
+  id               String     @id @default(cuid())
+  mode             RoomMode   @default(room)
+  title            String
+  celebrantName    String
+  age              Int?
+  occasion         String     @default("birthday")
+  eventAt          DateTime
+  timezone         String
+  bannerText       String     @default("HAPPY BIRTHDAY!")
+  hostEmail        String
+  adminTokenHash   String     @unique
+  contributeTokenHash String  @unique
+  celebrateTokenHash  String  @unique
+  status           RoomStatus @default(draft)
+  paidAt           DateTime?
+  /// set when the host unlocks early; boxes are openable once now >= eventAt OR unlockedAt is set
+  unlockedAt       DateTime?
+  expiresAt        DateTime?
+  createdAt        DateTime   @default(now())
+
+  boxes            Box[]
+  photoboothShots  PhotoboothShot[]
+  payments         Payment[]
+}
+
+model Box {
+  id              String    @id @default(cuid())
+  roomId          String
+  room            Room      @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  fromName        String
+  designJson      String
+  posX            Float
+  posY            Float
+  z               Int       @default(0)
+  sealedAt        DateTime  @default(now())
+  deleteTokenHash String
+  openedAt        DateTime?
+  reportedAt      DateTime?
+  createdAt       DateTime  @default(now())
+
+  goodies         Goodie[]
+  assets          Asset[]
+
+  @@index([roomId])
+}
+
+model Goodie {
+  id         String  @id @default(cuid())
+  boxId      String
+  box        Box     @relation(fields: [boxId], references: [id], onDelete: Cascade)
+  type       String
+  sortOrder  Int
+  payloadJson String
+  sizeBytes  Int
+
+  redemption CouponRedemption?
+
+  @@index([boxId])
+}
+
+model Asset {
+  id         String @id @default(cuid())
+  boxId      String
+  box        Box    @relation(fields: [boxId], references: [id], onDelete: Cascade)
+  storageKey String
+  mime       String
+  size       Int
+  sha256     String
+
+  @@index([boxId])
+}
+
+model PhotoboothShot {
+  id              String   @id @default(cuid())
+  roomId          String
+  room            Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  storageKey      String
+  caption         String
+  deleteTokenHash String
+  createdAt       DateTime @default(now())
+
+  @@index([roomId])
+}
+
+model CouponRedemption {
+  goodieId    String   @id
+  goodie      Goodie   @relation(fields: [goodieId], references: [id], onDelete: Cascade)
+  redeemedAt  DateTime @default(now())
+}
+
+model Payment {
+  id        String   @id @default(cuid())
+  roomId    String
+  room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  provider  String
+  sessionId String
+  amount    Int
+  currency  String
+  status    String
+  createdAt DateTime @default(now())
+
+  @@index([roomId])
+}

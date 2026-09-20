@@ -1,0 +1,109 @@
+import type { BoxContribution, PlacedBox } from '@/contribute/types';
+import type { BoxDesign } from '@/box/types';
+
+export type RoomInfo = {
+  id: string;
+  mode: 'room' | 'solo';
+  title: string;
+  celebrantName: string;
+  age: number | null;
+  occasion: string;
+  bannerText: string;
+  eventAt: string;
+  timezone: string;
+  unlocked: boolean;
+  hostEmail?: string;
+  status?: string;
+  unlockedAt?: string | null;
+  createdAt?: string;
+};
+
+export type RoomRole = 'admin' | 'contribute' | 'celebrate';
+
+async function asJson<T>(res: Response): Promise<T> {
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error ?? `Request failed (${res.status})`);
+  return body as T;
+}
+
+export async function fetchRoom(token: string) {
+  const res = await fetch(`/api/rooms/${token}`);
+  return asJson<{ role: RoomRole; room: RoomInfo }>(res);
+}
+
+export async function fetchBoxes(token: string) {
+  const res = await fetch(`/api/rooms/${token}/boxes`);
+  const data = await asJson<{ boxes: PlacedBoxApi[] }>(res);
+  return data.boxes;
+}
+
+export type PlacedBoxApi = {
+  id: string;
+  fromName: string;
+  design: BoxDesign;
+  x: number;
+  y: number;
+  z: number;
+  placedAt: string;
+  opened: boolean;
+};
+
+export async function createBox(token: string, contribution: BoxContribution, x: number, y: number) {
+  const res = await fetch(`/api/rooms/${token}/boxes`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      fromName: contribution.fromName,
+      design: contribution.design,
+      x,
+      y,
+      goodies: contribution.goodies.map((g) => ({ type: g.type, summary: g.summary, sizeBytes: g.sizeBytes, payload: g.payload })),
+    }),
+  });
+  return asJson<{ id: string; deleteToken: string }>(res);
+}
+
+export async function deleteBox(token: string, boxId: string, deleteToken?: string) {
+  const res = await fetch(`/api/rooms/${token}/boxes/${boxId}`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ deleteToken }),
+  });
+  return asJson<{ ok: true }>(res);
+}
+
+export async function unlockRoom(token: string) {
+  const res = await fetch(`/api/rooms/${token}/unlock`, { method: 'POST' });
+  return asJson<{ ok: true }>(res);
+}
+
+export async function uploadFile(token: string, file: File) {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch(`/api/rooms/${token}/uploads`, { method: 'POST', body: form });
+  return asJson<{ assetKey: string; mime: string; size: number; sha256: string }>(res);
+}
+
+export type BoxContents = {
+  fromName: string;
+  design: BoxDesign;
+  goodies: Array<{ id: string; type: string; sortOrder: number; summary?: string; assetUrls: string[] }>;
+};
+
+export async function fetchBoxContents(boxId: string, celebrateToken: string) {
+  const res = await fetch(`/api/boxes/${boxId}/contents?token=${encodeURIComponent(celebrateToken)}`);
+  return asJson<BoxContents>(res);
+}
+
+/** Adapts an API-backed room to the same shape RoomCanvas already speaks (see `PlacedBox`). */
+export function toPlacedBox(b: PlacedBoxApi): PlacedBox {
+  return {
+    id: b.id,
+    fromName: b.fromName,
+    design: b.design,
+    x: b.x,
+    y: b.y,
+    placedAt: Date.parse(b.placedAt),
+    opened: b.opened,
+  };
+}
