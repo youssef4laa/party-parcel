@@ -19,17 +19,40 @@ export function attachPlacement(app: Application, camera: Camera) {
   let screenX = 0;
   let screenY = 0;
   let onCommit: (x: number, y: number) => void = () => {};
+  // Touch has no hover state — a mouse can "follow the pointer" without any button held, but a
+  // finger only reports a position while it's actually touching the glass. So touch gets its own
+  // real press-move-release drag (matching section 13's "one finger... drags it"), tracked here,
+  // while mouse/pen keep the existing hover-then-click-to-drop flow untouched.
+  let touchDragging = false;
 
   function sync() {
     if (floating) floating.position.set(screenX, screenY);
   }
 
+  function moveTo(clientX: number, clientY: number) {
+    const rect = app.canvas.getBoundingClientRect();
+    screenX = clientX - rect.left;
+    screenY = clientY - rect.top;
+    sync();
+  }
+
+  const onPointerDown = (e: PointerEvent) => {
+    if (!active || e.pointerType !== 'touch') return;
+    touchDragging = true;
+    moveTo(e.clientX, e.clientY);
+  };
+
   const onPointerMove = (e: PointerEvent) => {
     if (!active) return;
-    const rect = app.canvas.getBoundingClientRect();
-    screenX = e.clientX - rect.left;
-    screenY = e.clientY - rect.top;
-    sync();
+    if (e.pointerType === 'touch' && !touchDragging) return;
+    moveTo(e.clientX, e.clientY);
+  };
+
+  const onPointerUp = (e: PointerEvent) => {
+    if (!active || e.pointerType !== 'touch' || !touchDragging) return;
+    touchDragging = false;
+    e.preventDefault(); // suppress the synthetic "click" that would otherwise double-commit
+    commit();
   };
 
   const onClick = (e: MouseEvent) => {
@@ -84,9 +107,12 @@ export function attachPlacement(app: Application, camera: Camera) {
   function stop() {
     if (!active) return;
     active = false;
+    touchDragging = false;
     camera.suspendKeyboard(false);
     camera.suspendPointer(false);
+    app.canvas.removeEventListener('pointerdown', onPointerDown);
     app.canvas.removeEventListener('pointermove', onPointerMove);
+    app.canvas.removeEventListener('pointerup', onPointerUp);
     app.canvas.removeEventListener('click', onClick);
     window.removeEventListener('keydown', onKeyDown);
     floating?.destroy();
@@ -114,7 +140,9 @@ export function attachPlacement(app: Application, camera: Camera) {
     screenY = rect.height / 2;
     sync();
 
+    app.canvas.addEventListener('pointerdown', onPointerDown);
     app.canvas.addEventListener('pointermove', onPointerMove);
+    app.canvas.addEventListener('pointerup', onPointerUp);
     app.canvas.addEventListener('click', onClick);
     window.addEventListener('keydown', onKeyDown);
   }
