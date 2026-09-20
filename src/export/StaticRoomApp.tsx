@@ -10,16 +10,24 @@ import type { PlacedBox } from '@/contribute/types';
 import { deriveKey, decryptJson, decryptBlob } from './browserCrypto';
 import { getLocalRedemption, setLocalRedemption } from './localRedemption';
 import { addLocalPhotoboothShot, listLocalPhotoboothShots, removeLocalPhotoboothShot } from '@/room/localPhotobooth';
+import CountdownBadge from './CountdownBadge';
+import PasswordPrompt from './PasswordPrompt';
+import type { StaticBoxSecret, StaticManifest } from './manifest';
 
 /** One exported bundle is always exactly one room, so a fixed namespace is enough — see the
  * "known gap" note in DECISIONS.md about why shots taken *before* export aren't carried over. */
 const PHOTOBOOTH_NS = 'export-room';
-import CountdownBadge from './CountdownBadge';
-import PasswordPrompt from './PasswordPrompt';
-import type { StaticGoodie, StaticManifest } from './manifest';
+
+/** Placeholder shown on the in-room sprite for every box until its password is entered — the
+ * real sender name is sender-authored text, not cosmetic design, so it lives inside the
+ * encrypted blob (see manifest.ts) and never reaches the DOM (not even as an aria-label) before
+ * decryption. */
+const SEALED_LABEL = 'A friend';
 
 type OpenState = {
-  boxMeta: { id: string; fromName: string; design: PlacedBox['design'] };
+  boxId: string;
+  design: PlacedBox['design'];
+  fromName: string;
   goodies: ViewerGoodie[];
 };
 
@@ -47,9 +55,11 @@ export default function StaticRoomApp() {
   const dataSource: RoomDataSource | null = manifest
     ? {
         async list() {
+          // fromName isn't in the plaintext manifest at all (see manifest.ts) — every sealed box
+          // shows the same generic placeholder in the room until its password is entered.
           return manifest.boxes.map((b) => ({
             id: b.id,
-            fromName: b.fromName,
+            fromName: SEALED_LABEL,
             design: b.design,
             x: b.x,
             y: b.y,
@@ -78,15 +88,16 @@ export default function StaticRoomApp() {
       }
     : null;
 
-  /** Decrypts one box's goodies + referenced media with the given key. Throws on wrong password
-   * (AES-GCM auth tag failure) — callers must not show anything if this rejects. */
+  /** Decrypts one box's sender name/tag text + goodies + referenced media with the given key.
+   * Throws on wrong password (AES-GCM auth tag failure) — callers must not show anything if this
+   * rejects. */
   const decryptBox = useCallback(
-    async (boxMeta: StaticManifest['boxes'][number], activeKey: CryptoKey): Promise<ViewerGoodie[]> => {
+    async (boxMeta: StaticManifest['boxes'][number], activeKey: CryptoKey): Promise<{ fromName: string; goodies: ViewerGoodie[] }> => {
       const goodiesBuf = await fetch(boxMeta.goodiesFile).then((r) => r.arrayBuffer());
-      const staticGoodies = await decryptJson<StaticGoodie[]>(activeKey, goodiesBuf);
+      const secret = await decryptJson<StaticBoxSecret>(activeKey, goodiesBuf);
 
-      return Promise.all(
-        staticGoodies.map(async (g) => {
+      const goodies = await Promise.all(
+        secret.goodies.map(async (g) => {
           const assetUrls = await Promise.all(
             g.assetFiles.map(async ({ path, mime }) => {
               const buf = await fetch(path).then((r) => r.arrayBuffer());
@@ -98,6 +109,7 @@ export default function StaticRoomApp() {
           return { ...g, assetUrls, redeemedAt: local ?? (g.redeemedAt as string | null) } as ViewerGoodie;
         }),
       );
+      return { fromName: secret.fromName, goodies };
     },
     [],
   );
@@ -110,8 +122,8 @@ export default function StaticRoomApp() {
 
       if (key) {
         try {
-          const goodies = await decryptBox(boxMeta, key);
-          setOpenBox({ boxMeta, goodies });
+          const { fromName, goodies } = await decryptBox(boxMeta, key);
+          setOpenBox({ boxId: boxMeta.id, design: boxMeta.design, fromName, goodies });
           setUnwrapping(false);
           return;
         } catch {
@@ -134,9 +146,9 @@ export default function StaticRoomApp() {
     setPasswordError(null);
     try {
       const candidateKey = await deriveKey(password, manifest.kdf.salt);
-      const goodies = await decryptBox(boxMeta, candidateKey);
+      const { fromName, goodies } = await decryptBox(boxMeta, candidateKey);
       setKey(candidateKey); // only cache once we've proven it actually decrypts something
-      setOpenBox({ boxMeta, goodies });
+      setOpenBox({ boxId: boxMeta.id, design: boxMeta.design, fromName, goodies });
       setUnwrapping(false);
       setPendingBoxId(null);
     } catch {
@@ -188,8 +200,8 @@ export default function StaticRoomApp() {
 
       {openBox && !unwrapping && (
         <BoxOpenAnimation
-          design={openBox.boxMeta.design}
-          fromName={openBox.boxMeta.fromName}
+          design={openBox.design}
+          fromName={openBox.fromName}
           goodieCount={openBox.goodies.length}
           onComplete={() => setUnwrapping(true)}
         />
@@ -198,12 +210,12 @@ export default function StaticRoomApp() {
       {openBox && unwrapping && (
         <GoodieUnwrapFlow
           goodies={openBox.goodies}
-          boxId={openBox.boxMeta.id}
+          boxId={openBox.boxId}
           celebrateToken=""
-          fromName={openBox.boxMeta.fromName}
+          fromName={openBox.fromName}
           onRedeem={handleRedeem}
           onDone={() => {
-            handleRef.current?.markBoxOpened(openBox.boxMeta.id);
+            handleRef.current?.markBoxOpened(openBox.boxId);
             setUnwrapping(false);
             setOpenBox(null);
           }}

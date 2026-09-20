@@ -7,8 +7,9 @@ import { prisma } from '../src/server/db';
 import { resolveRoomByToken } from '../src/server/rooms';
 import { getStorageProvider } from '../src/server/storage';
 import { generateSalt, deriveKey, encryptBuffer, encryptJson } from './lib/nodeCrypto';
+import { checkPasswordStrength } from './lib/passwordStrength';
 import { PBKDF2_ITERATIONS } from '../src/export/cryptoFormat';
-import type { StaticManifest, StaticGoodie } from '../src/export/manifest';
+import type { StaticManifest, StaticGoodie, StaticBoxSecret } from '../src/export/manifest';
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -44,8 +45,9 @@ async function main() {
     console.error('Usage: npm run export:gift -- --admin <adminToken> --password <password> [--out <dir>]');
     process.exit(1);
   }
-  if (password.length < 8) {
-    console.error('Use a password with at least 8 characters — it is the only real lock on this export.');
+  const strength = checkPasswordStrength(password);
+  if (!strength.ok) {
+    console.error(strength.reason);
     process.exit(1);
   }
 
@@ -115,13 +117,18 @@ async function main() {
       });
     }
 
+    const design = JSON.parse(box.designJson) as StaticManifest['boxes'][number]['design'];
+    const tagText = design.tagText ?? '';
+    // fromName and tagText are sender-authored text, not cosmetic design — they go in the
+    // encrypted blob with the goodies, not the plaintext manifest (see manifest.ts).
+    const secret: StaticBoxSecret = { fromName: box.fromName, tagText, goodies: staticGoodies };
+
     const goodiesFile = `boxes/${box.id}/goodies.enc`;
-    await writeFile(path.join(outDir, goodiesFile), encryptJson(key, staticGoodies));
+    await writeFile(path.join(outDir, goodiesFile), encryptJson(key, secret));
 
     boxMetas.push({
       id: box.id,
-      fromName: box.fromName,
-      design: JSON.parse(box.designJson),
+      design: { ...design, tagText: '' },
       x: box.posX,
       y: box.posY,
       placedAt: box.createdAt.toISOString(),
