@@ -20,14 +20,19 @@ export async function POST(
   const { token, key } = await params;
   const resolved = await resolveRoomByToken(token);
   if (!resolved) return jsonError(404, "This link doesn't exist (or was typed wrong).");
-  if (resolved.role !== 'contribute') return jsonError(403, 'Only the contribute link can upload files.');
+
+  const body = await req.json().catch(() => ({}));
+  const kind = body?.kind as UploadKind | undefined;
+
+  // See the matching comment in uploads/route.ts — photobooth uploads aren't contribute-only.
+  if (resolved.role !== 'contribute' && kind !== 'photobooth') {
+    return jsonError(403, 'Only the contribute link can upload files.');
+  }
 
   if (!checkRateLimit(`upload-finalize:${clientIp(req)}:${token}`, 60, 60_000)) {
     return jsonError(429, 'Too many uploads — please slow down.');
   }
 
-  const body = await req.json().catch(() => ({}));
-  const kind = body?.kind as UploadKind | undefined;
   const cfg = kind ? UPLOAD_KINDS[kind] : undefined;
   if (!cfg) return jsonError(400, 'Unknown upload kind.');
 

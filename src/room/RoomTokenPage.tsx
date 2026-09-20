@@ -78,7 +78,10 @@ export default function RoomTokenPage({ token }: { token: string }) {
         bannerText={room.bannerText}
         dataSource={dataSource}
         canContribute={role === 'contribute'}
-        roomToken={role === 'contribute' ? token : undefined}
+        // Always passed (not just for the contribute role): photobooth is a normal room
+        // interaction open to admin/contribute/celebrate alike, unlike packing a box, which the
+        // "+" button UI already restricts to canContribute — see DECISIONS.md.
+        roomToken={token}
         onBoxClick={role === 'celebrate' ? handleBoxClick : undefined}
         handleRef={handleRef}
       />

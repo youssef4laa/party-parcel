@@ -9,6 +9,11 @@ import type { RoomDataSource } from '@/room/dataSource';
 import type { PlacedBox } from '@/contribute/types';
 import { deriveKey, decryptJson, decryptBlob } from './browserCrypto';
 import { getLocalRedemption, setLocalRedemption } from './localRedemption';
+import { addLocalPhotoboothShot, listLocalPhotoboothShots, removeLocalPhotoboothShot } from '@/room/localPhotobooth';
+
+/** One exported bundle is always exactly one room, so a fixed namespace is enough — see the
+ * "known gap" note in DECISIONS.md about why shots taken *before* export aren't carried over. */
+const PHOTOBOOTH_NS = 'export-room';
 import CountdownBadge from './CountdownBadge';
 import PasswordPrompt from './PasswordPrompt';
 import type { StaticGoodie, StaticManifest } from './manifest';
@@ -56,6 +61,19 @@ export default function StaticRoomApp() {
         },
         async remove() {
           throw new Error('This is a sealed, exported room — presents can no longer be removed.');
+        },
+        // No backend to talk to at all here — shots taken while browsing the export live only
+        // in this visitor's browser (localStorage), same as coupon redemptions.
+        photobooth: {
+          async list() {
+            return listLocalPhotoboothShots(PHOTOBOOTH_NS);
+          },
+          async add(photo, celebrantName) {
+            return addLocalPhotoboothShot(PHOTOBOOTH_NS, photo, celebrantName);
+          },
+          async remove(shot) {
+            removeLocalPhotoboothShot(PHOTOBOOTH_NS, shot.id);
+          },
         },
       }
     : null;

@@ -7,12 +7,15 @@ import { buildScene } from './scene/buildScene';
 import { attachPlacement } from './scene/placement';
 import { createBoxSprite, textureForDesign, animateSettle, attachHoverWobble } from './scene/presentBox';
 import { showLabel } from './scene/interactions/label';
+import type { PhotoWall } from './scene/interactions/photobooth';
 import { registerBannerText } from './manifest';
 import FrameModal from './ui/FrameModal';
 import PanHint from './ui/PanHint';
 import ContributeFlow from '@/contribute/ContributeFlow';
+import PhotoboothModal from '@/photobooth/PhotoboothModal';
+import PrintModal from '@/photobooth/PrintModal';
 import { createStubDataSource } from '@/contribute/stubDataSource';
-import type { RoomDataSource } from './dataSource';
+import type { RoomDataSource, PhotoboothShotView } from './dataSource';
 import type { BoxContribution, PlacedBox } from '@/contribute/types';
 
 export type RoomCanvasProps = {
@@ -46,6 +49,7 @@ type Engine = {
   placement: ReturnType<typeof attachPlacement>;
   reducedMotion: boolean;
   boxSprites: Map<string, { sprite: Sprite; cleanup: () => void }>;
+  photoWall: PhotoWall;
 };
 
 const UNDO_WINDOW_MS = 60_000;
@@ -72,6 +76,9 @@ export default function RoomCanvas({
   const [placingHint, setPlacingHint] = useState(false);
   const [undoToast, setUndoToast] = useState<{ boxId: string; fromName: string } | null>(null);
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [photoboothOpen, setPhotoboothOpen] = useState(false);
+  const [viewingShot, setViewingShot] = useState<PhotoboothShotView | null>(null);
+  const shotsRef = useRef<PhotoboothShotView[]>([]);
 
   const placeBoxSprite = useCallback(
     (box: PlacedBox, animate: boolean) => {
@@ -106,7 +113,7 @@ export default function RoomCanvas({
 
     let destroyed = false;
     let app: Application | null = null;
-    let cleanupScene: (() => void) | null = null;
+    let cleanupScene: { destroy: () => void; photoWall: PhotoWall } | null = null;
     let cleanupCamera: (() => void) | null = null;
 
     async function init() {
@@ -152,18 +159,36 @@ export default function RoomCanvas({
 
       cleanupScene = buildScene(application, world, camera.drag, {
         onEnlargeFrame: setEnlargedFrame,
+        onOpenPhotobooth: () => setPhotoboothOpen(true),
+        onTapPrint: (shot) => setViewingShot(shot),
         reducedMotion,
       });
 
       const placement = attachPlacement(application, camera);
 
-      engineRef.current = { app: application, world, camera, placement, reducedMotion, boxSprites: new Map() };
+      engineRef.current = {
+        app: application,
+        world,
+        camera,
+        placement,
+        reducedMotion,
+        boxSprites: new Map(),
+        photoWall: cleanupScene.photoWall,
+      };
 
       try {
         const boxes = await source.list();
         if (!destroyed) for (const box of boxes) placeBoxSprite(box, false);
       } catch {
         // demo/dev only — a failed initial box list shouldn't block rendering the room
+      }
+
+      try {
+        const shots = await source.photobooth.list();
+        shotsRef.current = shots;
+        if (!destroyed) await cleanupScene.photoWall.setShots(shots);
+      } catch {
+        // a failed initial photo-wall fetch shouldn't block rendering the room either
       }
 
       setReady(true);
@@ -183,7 +208,7 @@ export default function RoomCanvas({
 
     return () => {
       destroyed = true;
-      cleanupScene?.();
+      cleanupScene?.destroy();
       cleanupCamera?.();
       engineRef.current?.placement.destroy();
       engineRef.current = null;
@@ -249,6 +274,18 @@ export default function RoomCanvas({
     }
   }
 
+  async function handleCapturePhoto(photo: Blob) {
+    const shot = await source.photobooth.add(photo, celebrantName);
+    shotsRef.current = [...shotsRef.current, shot];
+    await engineRef.current?.photoWall.setShots(shotsRef.current);
+  }
+
+  async function handleDeleteShot(shot: PhotoboothShotView) {
+    await source.photobooth.remove(shot);
+    shotsRef.current = shotsRef.current.filter((s) => s.id !== shot.id);
+    await engineRef.current?.photoWall.setShots(shotsRef.current);
+  }
+
   return (
     <div className="relative h-full w-full overflow-hidden bg-[#0d0d1f]">
       <div ref={hostRef} className="h-full w-full" role="application" aria-label="Party room" />
@@ -288,6 +325,12 @@ export default function RoomCanvas({
       </div>
 
       {enlargedFrame && <FrameModal subject={enlargedFrame} onClose={() => setEnlargedFrame(null)} />}
+
+      {photoboothOpen && <PhotoboothModal onCapture={handleCapturePhoto} onClose={() => setPhotoboothOpen(false)} />}
+
+      {viewingShot && (
+        <PrintModal shot={viewingShot} onClose={() => setViewingShot(null)} onDelete={handleDeleteShot} />
+      )}
 
       {contributing && (
         <ContributeFlow onCancel={() => setContributing(false)} onReadyToPlace={handleReadyToPlace} roomToken={roomToken} />

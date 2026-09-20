@@ -14,15 +14,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   const { token } = await params;
   const resolved = await resolveRoomByToken(token);
   if (!resolved) return jsonError(404, "This link doesn't exist (or was typed wrong).");
-  if (resolved.role !== 'contribute') return jsonError(403, 'Only the contribute link can upload files.');
+
+  const body = await req.json().catch(() => null);
+  const kind = body?.kind as UploadKind | undefined;
+  const contentType = typeof body?.contentType === 'string' ? body.contentType : '';
+
+  // Goodie uploads (photo/drawing/video/voice/song) are contribute-only, since only a
+  // contributor packs a box. A photobooth shot isn't part of any box — it's a normal room
+  // interaction like the cake or balloons, open to whoever has any link (admin/contribute/
+  // celebrate), same as the rest of section 3's interaction table.
+  if (resolved.role !== 'contribute' && kind !== 'photobooth') {
+    return jsonError(403, 'Only the contribute link can upload files.');
+  }
 
   if (!checkRateLimit(`upload-init:${clientIp(req)}:${token}`, 60, 60_000)) {
     return jsonError(429, 'Too many uploads — please slow down.');
   }
 
-  const body = await req.json().catch(() => null);
-  const kind = body?.kind as UploadKind | undefined;
-  const contentType = typeof body?.contentType === 'string' ? body.contentType : '';
   const cfg = kind ? UPLOAD_KINDS[kind] : undefined;
   if (!cfg) return jsonError(400, 'Unknown upload kind.');
   if (!cfg.types.includes(contentType)) {

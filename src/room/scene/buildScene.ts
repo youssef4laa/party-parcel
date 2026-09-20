@@ -7,10 +7,14 @@ import { attachBalloon } from './interactions/balloon';
 import { attachStar } from './interactions/star';
 import { attachCake } from './interactions/cake';
 import { attachFrame } from './interactions/frame';
+import { attachCameraTrigger, PhotoWall } from './interactions/photobooth';
+import type { PhotoboothShotView } from '../dataSource';
 
 export type SceneCallbacks = {
   onEnlargeFrame: (subject: 'mountain' | 'tulip') => void;
   onCakeToggle?: (lit: boolean) => void;
+  onOpenPhotobooth: () => void;
+  onTapPrint: (shot: PhotoboothShotView) => void;
   reducedMotion: boolean;
 };
 
@@ -40,6 +44,12 @@ export function buildScene(app: Application, world: Container, drag: DragState, 
 
   const camera = sprite('camera', 470, 300, { anchorX: 0.5, anchorY: 0 });
   world.addChild(camera);
+  cleanups.push(attachCameraTrigger(camera, drag, cb.onOpenPhotobooth));
+
+  // photo wall: prints accumulate beside the booth, on the open wall between the camera and the
+  // window (see DECISIONS.md for the grid layout choice)
+  const photoWall = new PhotoWall(world, 610, 90, cb.onTapPrint);
+  cleanups.push(() => photoWall.destroy());
 
   // --- center zone: window, curtains, banner, table setting ---
   const windowX = WINDOW_X;
@@ -108,5 +118,5 @@ export function buildScene(app: Application, world: Container, drag: DragState, 
   const cat = new CatController(world, app.ticker, drag, cb.reducedMotion);
   cleanups.push(() => cat.destroy());
 
-  return () => cleanups.forEach((fn) => fn());
+  return { destroy: () => cleanups.forEach((fn) => fn()), photoWall };
 }

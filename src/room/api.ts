@@ -81,7 +81,7 @@ export async function unlockRoom(token: string) {
   return asJson<{ ok: true }>(res);
 }
 
-export type UploadKind = 'photo' | 'drawing' | 'video' | 'voice' | 'song';
+export type UploadKind = 'photo' | 'drawing' | 'video' | 'voice' | 'song' | 'photobooth';
 
 /**
  * Two-phase presigned upload: ask for a PUT target, PUT the raw bytes straight there (our app
@@ -132,6 +132,32 @@ export async function redeemCoupon(boxId: string, goodieId: string, celebrateTok
     body: JSON.stringify({ token: celebrateToken }),
   });
   return asJson<{ redeemedAt: string; alreadyRedeemed: boolean }>(res);
+}
+
+export type PhotoboothShotApi = { id: string; url: string; caption: string; createdAt: string };
+
+export async function fetchPhotoboothShots(token: string) {
+  const res = await fetch(`/api/rooms/${token}/photobooth`);
+  const data = await asJson<{ shots: PhotoboothShotApi[] }>(res);
+  return data.shots;
+}
+
+export async function createPhotoboothShot(token: string, assetKey: string) {
+  const res = await fetch(`/api/rooms/${token}/photobooth`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ assetKey }),
+  });
+  return asJson<PhotoboothShotApi & { deleteToken: string }>(res);
+}
+
+export async function deletePhotoboothShot(token: string, shotId: string, deleteToken?: string) {
+  const res = await fetch(`/api/rooms/${token}/photobooth/${shotId}`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ deleteToken }),
+  });
+  return asJson<{ ok: true }>(res);
 }
 
 /** Adapts an API-backed room to the same shape RoomCanvas already speaks (see `PlacedBox`). */
