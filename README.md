@@ -207,12 +207,14 @@ blobs. Locally, `npx serve ./export/my-room` (or any static file server) is enou
 **Third-party content**: Song and Video goodies that use a Spotify/YouTube/Apple
 Music/SoundCloud/Vimeo *link* (as opposed to an uploaded file) embed a player from that
 provider's own site, and Location goodies with coordinates embed a live OpenStreetMap view —
-both still make requests to those third parties even in an otherwise fully static, offline-capable
-export. The page also always loads its pixel fonts from Google Fonts, regardless of goodie
-content (same as the live app). Goodies that use an *uploaded* file (photo, drawing, an uploaded
-song/video/voice recording) are fully self-contained in the exported folder and need no network
-access beyond the static host itself. Verified with a real network-request audit — see
-`tests/export-subpath.spec.ts`.
+those still make requests to their respective providers even in an otherwise fully static,
+offline-capable export, but *only* for boxes that actually use one of those link types. Goodies
+that use an *uploaded* file (photo, drawing, an uploaded song/video/voice recording) are fully
+self-contained in the exported folder and need no network access beyond the static host itself —
+and so is everything else: the pixel fonts are bundled into the export (not loaded from Google
+Fonts, unlike the live app, which always has normal server-side internet access) under an SIL
+Open Font License that explicitly permits this; the license text ships alongside them at
+`fonts-license/`. Verified with a real network-request audit — see `tests/export-subpath.spec.ts`.
 
 The export also works correctly when served from a subpath (e.g. `example.com/my-export/`, not
 just a domain root) — asset paths are relative, and a `.nojekyll` file is included for GitHub

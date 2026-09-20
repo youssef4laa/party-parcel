@@ -274,10 +274,12 @@ test.describe('static export served from a subpath', () => {
       }
 
       // --- 8. Full network-request audit for the whole session (http/https only — see above) ---
+      // Google Fonts is deliberately NOT in this allowlist — the export self-hosts its pixel
+      // fonts (export-site/src/fonts.css) specifically so nothing is requested just to render
+      // text. If fonts.googleapis.com/fonts.gstatic.com ever show up again, that's a real
+      // regression, not an accepted exception — see DECISIONS.md.
       const allowedHosts = new Set([
         `localhost:${port}`, // the export's own static files, served from the subpath
-        'fonts.googleapis.com',
-        'fonts.gstatic.com',
         'open.spotify.com', // song embed (this box's song goodie)
         'www.youtube.com', // video embed
         'www.openstreetmap.org', // location embed

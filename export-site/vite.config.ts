@@ -22,5 +22,11 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    // Vite's default 4KB base64-inlines small assets straight into the CSS/JS instead of
+    // emitting a separate file — harmless for correctness (still no network request), but it
+    // made the self-hosted font files inconsistent (one of the four woff2 subsets is under 4KB)
+    // and harder to audit. Disabled so every font file is a real, separately relatively-pathed
+    // file, matching the other three.
+    assetsInlineLimit: 0,
   },
 });

@@ -1,3 +1,7 @@
+/* Self-hosted pixel fonts (no Google Fonts request at runtime) — see fonts.css and
+   DECISIONS.md for the license check. */
+@import './fonts.css';
+
 /* Reuses the live app's exact theme/keyframes so the exported room looks identical — see
    src/app/globals.css. Kept as a single source of truth rather than duplicated. */
 @import '../../src/app/globals.css';
