@@ -1,0 +1,8 @@
+/* Reuses the live app's exact theme/keyframes so the exported room looks identical — see
+   src/app/globals.css. Kept as a single source of truth rather than duplicated. */
+@import '../../src/app/globals.css';
+
+/* The shared components this bundle actually renders live outside export-site/'s own directory
+   tree (in ../src, via the "@/" alias), so Tailwind v4's automatic content-detection heuristic
+   (which scans relative to this file's own folder) never sees their class names. Say so explicitly. */
+@source '../../src';

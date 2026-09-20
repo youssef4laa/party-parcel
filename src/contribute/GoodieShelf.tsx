@@ -1,6 +1,10 @@
 'use client';
 
-import { GOODIE_ICONS, GOODIE_LABELS, MAX_GOODIES, MAX_TOTAL_BYTES, type GoodieItem, type GoodieType } from './types';
+import { useState } from 'react';
+import { LIMITS } from '@/config/limits';
+import { GOODIE_EDITORS } from '@/goodies/editors';
+import { summarizeGoodie } from '@/goodies/summary';
+import { GOODIE_ICONS, GOODIE_LABELS, type GoodieItem, type GoodieType } from './types';
 
 const ALL_TYPES = Object.keys(GOODIE_LABELS) as GoodieType[];
 
@@ -10,19 +14,24 @@ function formatMb(bytes: number) {
 
 export default function GoodieShelf({
   goodies,
+  roomToken,
   onAdd,
   onUpdate,
   onRemove,
   onReorder,
 }: {
   goodies: GoodieItem[];
-  onAdd: (type: GoodieType) => void;
-  onUpdate: (id: string, summary: string) => void;
+  roomToken?: string;
+  onAdd: (item: GoodieItem) => void;
+  onUpdate: (id: string, item: GoodieItem) => void;
   onRemove: (id: string) => void;
   onReorder: (id: string, dir: -1 | 1) => void;
 }) {
+  const [editing, setEditing] = useState<{ type: GoodieType; item?: GoodieItem } | null>(null);
   const totalBytes = goodies.reduce((sum, g) => sum + g.sizeBytes, 0);
-  const atLimit = goodies.length >= MAX_GOODIES;
+  const atLimit = goodies.length >= LIMITS.maxGoodiesPerBox;
+
+  const EditorComponent = editing ? GOODIE_EDITORS[editing.type] : null;
 
   return (
     <div>
@@ -33,7 +42,7 @@ export default function GoodieShelf({
             key={type}
             type="button"
             disabled={atLimit}
-            onClick={() => onAdd(type)}
+            onClick={() => setEditing({ type })}
             className="border-2 border-[#e0b8c8] bg-[#fff6d5] px-2 py-1 font-mono text-sm text-[#5e3620] hover:border-[#ff3d8b] disabled:opacity-30"
           >
             {GOODIE_ICONS[type]} {GOODIE_LABELS[type]}
@@ -41,12 +50,31 @@ export default function GoodieShelf({
         ))}
       </div>
 
+      {editing && EditorComponent && (
+        <div className="mb-2">
+          <EditorComponent
+            key={editing.item?.id ?? editing.type}
+            initial={editing.item}
+            roomToken={roomToken}
+            onCancel={() => setEditing(null)}
+            onSave={(item) => {
+              if (editing.item) {
+                onUpdate(editing.item.id, { ...item, id: editing.item.id });
+              } else {
+                onAdd({ ...item, id: crypto.randomUUID() });
+              }
+              setEditing(null);
+            }}
+          />
+        </div>
+      )}
+
       <div className="mb-1.5 flex justify-between font-mono text-sm text-[#5e3620]">
         <span>
-          {goodies.length} / {MAX_GOODIES}
+          {goodies.length} / {LIMITS.maxGoodiesPerBox}
         </span>
         <span>
-          {formatMb(totalBytes)} MB / {formatMb(MAX_TOTAL_BYTES)} MB
+          {formatMb(totalBytes)} MB / {formatMb(LIMITS.maxBytesPerBox)} MB
         </span>
       </div>
 
@@ -64,13 +92,13 @@ export default function GoodieShelf({
               >
                 <span aria-hidden>{GOODIE_ICONS[g.type]}</span>
                 <span className="font-mono text-xs uppercase text-[#5e3620]/60">{GOODIE_LABELS[g.type]}</span>
-                <input
-                  value={g.summary}
-                  onChange={(e) => onUpdate(g.id, e.target.value)}
-                  className="min-w-0 flex-1 border border-[#e0b8c8] bg-white px-1.5 py-0.5 font-mono text-sm text-[#5e3620] focus:border-[#ff3d8b] focus:outline-none"
-                  aria-label={`${GOODIE_LABELS[g.type]} details`}
-                />
-                <span className="font-mono text-xs text-[#5e3620]/50">x1</span>
+                <button
+                  type="button"
+                  onClick={() => setEditing({ type: g.type, item: g })}
+                  className="min-w-0 flex-1 truncate text-left font-mono text-sm text-[#5e3620] underline decoration-dotted hover:text-[#ff3d8b]"
+                >
+                  {summarizeGoodie(g)}
+                </button>
                 <button
                   type="button"
                   aria-label="Move up"

@@ -4,9 +4,10 @@ import { useMemo, useRef, useState } from 'react';
 import BoxDesigner from '@/box/BoxDesigner';
 import { DEFAULT_DESIGN, type BoxDesign } from '@/box/types';
 import { uploadFile } from '@/room/api';
+import { processImageClientSide } from '@/room/imageProcessing';
+import { LIMITS } from '@/config/limits';
 import GoodieShelf from './GoodieShelf';
-import { makeId } from './stubBackend';
-import { MAX_GOODIES, MAX_TOTAL_BYTES, type BoxContribution, type GoodieItem, type GoodieType } from './types';
+import { type BoxContribution, type GoodieItem } from './types';
 
 export type ContributeFlowProps = {
   onCancel: () => void;
@@ -33,32 +34,37 @@ export default function ContributeFlow({ onCancel, onReadyToPlace, roomToken }: 
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const finalGoodies = useMemo(() => {
+  const finalGoodies = useMemo<GoodieItem[]>(() => {
     const list = [...goodies];
     if (letter.trim()) {
-      list.push({ id: '__letter', type: 'note', summary: letter.trim().slice(0, 60), sizeBytes: bytesOf(letter) });
+      list.push({
+        id: '__letter',
+        type: 'note',
+        text: letter.trim(),
+        paperStyle: 'cream',
+        font: 'typewriter',
+        sizeBytes: bytesOf(letter),
+      });
     }
-    if (pictures.length > 0) {
+    if (pictures.length > 0 && uploadedAssetKeys.length > 0) {
       list.push({
         id: '__pictures',
         type: 'photo',
-        summary: `${pictures.length} photo${pictures.length > 1 ? 's' : ''}`,
+        assetKeys: uploadedAssetKeys,
         sizeBytes: pictures.reduce((s, f) => s + f.size, 0),
-        payload: uploadedAssetKeys.length > 0 ? { assetKeys: uploadedAssetKeys } : undefined,
       });
     }
     return list;
   }, [goodies, letter, pictures, uploadedAssetKeys]);
 
   const totalBytes = finalGoodies.reduce((s, g) => s + g.sizeBytes, 0);
-  const overLimit = finalGoodies.length > MAX_GOODIES || totalBytes > MAX_TOTAL_BYTES;
+  const overLimit = finalGoodies.length > LIMITS.maxGoodiesPerBox || totalBytes > LIMITS.maxBytesPerBox;
 
-  function addGoodie(type: GoodieType) {
-    if (goodies.length >= MAX_GOODIES) return;
-    setGoodies((g) => [...g, { id: makeId(), type, summary: '', sizeBytes: 1024 }]);
+  function addGoodie(item: GoodieItem) {
+    setGoodies((g) => [...g, item]);
   }
-  function updateGoodie(id: string, summary: string) {
-    setGoodies((g) => g.map((item) => (item.id === id ? { ...item, summary } : item)));
+  function updateGoodie(id: string, item: GoodieItem) {
+    setGoodies((g) => g.map((existing) => (existing.id === id ? item : existing)));
   }
   function removeGoodie(id: string) {
     setGoodies((g) => g.filter((item) => item.id !== id));
@@ -83,7 +89,10 @@ export default function ContributeFlow({ onCancel, onReadyToPlace, roomToken }: 
     setUploading(true);
     setError(null);
     try {
-      const results = await Promise.all(images.map((f) => uploadFile(roomToken, f)));
+      // resize/re-encode/strip EXIF in the browser first (see src/room/imageProcessing.ts) —
+      // production never depends on the server-side sharp pass for this
+      const processed = await Promise.all(images.map(processImageClientSide));
+      const results = await Promise.all(processed.map((f) => uploadFile(roomToken, f, 'photo')));
       setUploadedAssetKeys((keys) => [...keys, ...results.map((r) => r.assetKey)]);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'That upload failed — try a different image.');
@@ -99,7 +108,7 @@ export default function ContributeFlow({ onCancel, onReadyToPlace, roomToken }: 
       return;
     }
     if (overLimit) {
-      setError(`Keep it to ${MAX_GOODIES} goodies and ${(MAX_TOTAL_BYTES / (1024 * 1024)).toFixed(0)} MB total.`);
+      setError(`Keep it to ${LIMITS.maxGoodiesPerBox} goodies and ${(LIMITS.maxBytesPerBox / (1024 * 1024)).toFixed(0)} MB total.`);
       return;
     }
     if (uploading) {
@@ -195,6 +204,7 @@ export default function ContributeFlow({ onCancel, onReadyToPlace, roomToken }: 
 
             <GoodieShelf
               goodies={goodies}
+              roomToken={roomToken}
               onAdd={addGoodie}
               onUpdate={updateGoodie}
               onRemove={removeGoodie}

@@ -10,6 +10,7 @@ import { fetchRoom, fetchBoxContents, type RoomInfo, type RoomRole } from './api
 import type { RoomCanvasHandle } from './RoomCanvas';
 import type { PlacedBox } from '@/contribute/types';
 import BoxOpenAnimation from '@/box/BoxOpenAnimation';
+import GoodieUnwrapFlow from '@/goodies/GoodieUnwrapFlow';
 import type { BoxContents } from './api';
 
 export default function RoomTokenPage({ token }: { token: string }) {
@@ -18,6 +19,7 @@ export default function RoomTokenPage({ token }: { token: string }) {
   const [room, setRoom] = useState<RoomInfo | null>(null);
   const [lockedBox, setLockedBox] = useState<{ eventAt: Date } | null>(null);
   const [openBox, setOpenBox] = useState<{ boxId: string; contents: BoxContents } | null>(null);
+  const [unwrapping, setUnwrapping] = useState(false);
   const [openError, setOpenError] = useState<string | null>(null);
   const handleRef = useRef<RoomCanvasHandle | null>(null);
   const [dataSource] = useState(() => createApiDataSource(token));
@@ -52,6 +54,7 @@ export default function RoomTokenPage({ token }: { token: string }) {
       try {
         const contents = await fetchBoxContents(box.id, token);
         setOpenBox({ boxId: box.id, contents });
+        setUnwrapping(false);
       } catch (e) {
         setOpenError(e instanceof Error ? e.message : "Couldn't open that present.");
       }
@@ -97,13 +100,24 @@ export default function RoomTokenPage({ token }: { token: string }) {
         </div>
       )}
 
-      {openBox && (
+      {openBox && !unwrapping && (
         <BoxOpenAnimation
           design={openBox.contents.design}
           fromName={openBox.contents.fromName}
           goodieCount={openBox.contents.goodies.length}
-          onComplete={() => {
+          onComplete={() => setUnwrapping(true)}
+        />
+      )}
+
+      {openBox && unwrapping && (
+        <GoodieUnwrapFlow
+          goodies={openBox.contents.goodies}
+          boxId={openBox.boxId}
+          celebrateToken={token}
+          fromName={openBox.contents.fromName}
+          onDone={() => {
             handleRef.current?.markBoxOpened(openBox.boxId);
+            setUnwrapping(false);
             setOpenBox(null);
           }}
         />

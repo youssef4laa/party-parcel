@@ -17,7 +17,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ boxI
 
   const box = await prisma.box.findUnique({
     where: { id: boxId },
-    include: { goodies: { orderBy: { sortOrder: 'asc' } }, assets: true },
+    include: { goodies: { orderBy: { sortOrder: 'asc' }, include: { redemption: true } } },
   });
   if (!box) return jsonError(404, 'Present not found.');
 
@@ -33,11 +33,21 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ boxI
   const goodies = await Promise.all(
     box.goodies.map(async (g) => {
       const payload = JSON.parse(g.payloadJson) as Record<string, unknown>;
-      const assetKeys = Array.isArray(payload.assetKeys) ? (payload.assetKeys as string[]) : [];
-      const assetUrls = await Promise.all(assetKeys.map((k) => storage.signedGetUrl(k, 300)));
-      const { assetKeys: _omit, ...rest } = payload;
-      void _omit;
-      return { id: g.id, type: g.type, sortOrder: g.sortOrder, ...rest, assetUrls };
+      // Different goodie types reference assets under different field names (photo: assetKeys[],
+      // song/video/voice/drawing: a single assetKey) — normalize both into one `assetUrls` list.
+      const keys = [
+        ...(Array.isArray(payload.assetKeys) ? (payload.assetKeys as string[]) : []),
+        ...(typeof payload.assetKey === 'string' ? [payload.assetKey as string] : []),
+      ];
+      const assetUrls = await Promise.all(keys.map((k) => storage.signedGetUrl(k, 300)));
+      return {
+        id: g.id,
+        type: g.type,
+        sortOrder: g.sortOrder,
+        ...payload,
+        assetUrls,
+        redeemedAt: g.redemption?.redeemedAt ?? null,
+      };
     }),
   );
 

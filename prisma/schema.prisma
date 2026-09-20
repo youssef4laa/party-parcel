@@ -1,7 +1,10 @@
 // Party Parcel data model (section 10 of the brief).
 // Dev datasource is SQLite for a zero-setup `npm run dev` (see DECISIONS.md).
 // Swapping to Postgres for production is a datasource + DATABASE_URL change only —
-// nothing here uses SQLite-only features.
+// nothing here uses SQLite- or Postgres-only features (notably: no native `enum`, since D1's
+// very limited ALTER TABLE support makes Prisma's enum-as-CHECK-constraint emulation risky to
+// evolve later; `mode`/`status` are plain strings validated in src/server/rooms.ts instead).
+// Verified against real Postgres 16 and against Cloudflare D1's local emulator — see DECISIONS.md.
 
 generator client {
   provider = "prisma-client-js"
@@ -13,20 +16,10 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum RoomMode {
-  room
-  solo
-}
-
-enum RoomStatus {
-  draft
-  live
-  deleted
-}
-
 model Room {
   id               String     @id @default(cuid())
-  mode             RoomMode   @default(room)
+  /// "room" | "solo" — see RoomMode in src/server/rooms.ts
+  mode             String     @default("room")
   title            String
   celebrantName    String
   age              Int?
@@ -38,7 +31,8 @@ model Room {
   adminTokenHash   String     @unique
   contributeTokenHash String  @unique
   celebrateTokenHash  String  @unique
-  status           RoomStatus @default(draft)
+  /// "draft" | "live" | "deleted" — see RoomStatus in src/server/rooms.ts
+  status           String     @default("draft")
   paidAt           DateTime?
   /// set when the host unlocks early; boxes are openable once now >= eventAt OR unlockedAt is set
   unlockedAt       DateTime?

@@ -48,3 +48,13 @@ next-env.d.ts
 
 # session/harness runtime state, not project config
 /.claude/scheduled_tasks.lock
+
+# static export output (contains a per-run encrypted room, not project source)
+/export/
+/export-site/dist/
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/

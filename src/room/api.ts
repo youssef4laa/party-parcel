@@ -57,7 +57,11 @@ export async function createBox(token: string, contribution: BoxContribution, x:
       design: contribution.design,
       x,
       y,
-      goodies: contribution.goodies.map((g) => ({ type: g.type, summary: g.summary, sizeBytes: g.sizeBytes, payload: g.payload })),
+      goodies: contribution.goodies.map((g) => {
+        const wire: Record<string, unknown> = { ...g };
+        delete wire.id;
+        return wire;
+      }),
     }),
   });
   return asJson<{ id: string; deleteToken: string }>(res);
@@ -77,22 +81,57 @@ export async function unlockRoom(token: string) {
   return asJson<{ ok: true }>(res);
 }
 
-export async function uploadFile(token: string, file: File) {
-  const form = new FormData();
-  form.append('file', file);
-  const res = await fetch(`/api/rooms/${token}/uploads`, { method: 'POST', body: form });
-  return asJson<{ assetKey: string; mime: string; size: number; sha256: string }>(res);
+export type UploadKind = 'photo' | 'drawing' | 'video' | 'voice' | 'song';
+
+/**
+ * Two-phase presigned upload: ask for a PUT target, PUT the raw bytes straight there (our app
+ * server never proxies them on the way in), then ask the server to validate+finalize what
+ * landed. Works the same whether the target is our own local-storage PUT route or a real S3/R2
+ * presigned URL — see src/server/storage.
+ */
+export async function uploadFile(token: string, file: File, kind: UploadKind = 'photo') {
+  const init = await fetch(`/api/rooms/${token}/uploads`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ kind, contentType: file.type }),
+  });
+  const { uploadUrl, key } = await asJson<{ uploadUrl: string; key: string; maxBytes: number }>(init);
+
+  const putRes = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': file.type },
+    body: file,
+  });
+  if (!putRes.ok) throw new Error(`Upload failed (${putRes.status})`);
+
+  const final = await fetch(`/api/rooms/${token}/uploads/${key}/finalize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ kind }),
+  });
+  return asJson<{ assetKey: string; mime: string; size: number; sha256: string }>(final);
 }
 
 export type BoxContents = {
   fromName: string;
   design: BoxDesign;
-  goodies: Array<{ id: string; type: string; sortOrder: number; summary?: string; assetUrls: string[] }>;
+  goodies: Array<
+    Record<string, unknown> & { id: string; type: string; sortOrder: number; assetUrls: string[]; redeemedAt: string | null }
+  >;
 };
 
 export async function fetchBoxContents(boxId: string, celebrateToken: string) {
   const res = await fetch(`/api/boxes/${boxId}/contents?token=${encodeURIComponent(celebrateToken)}`);
   return asJson<BoxContents>(res);
+}
+
+export async function redeemCoupon(boxId: string, goodieId: string, celebrateToken: string) {
+  const res = await fetch(`/api/boxes/${boxId}/goodies/${goodieId}/redeem`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: celebrateToken }),
+  });
+  return asJson<{ redeemedAt: string; alreadyRedeemed: boolean }>(res);
 }
 
 /** Adapts an API-backed room to the same shape RoomCanvas already speaks (see `PlacedBox`). */

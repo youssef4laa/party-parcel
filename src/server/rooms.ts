@@ -3,6 +3,9 @@ import { generateToken, hashToken } from './tokens';
 import type { Room } from '@/generated/prisma';
 
 export type RoomRole = 'admin' | 'contribute' | 'celebrate';
+/** Plain strings in the DB (see schema.prisma for why), typed here at the app boundary instead. */
+export type RoomMode = 'room' | 'solo';
+export type RoomStatus = 'draft' | 'live' | 'deleted';
 
 export async function resolveRoomByToken(token: string): Promise<{ room: Room; role: RoomRole } | null> {
   if (!token) return null;
