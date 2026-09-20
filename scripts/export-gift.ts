@@ -160,6 +160,10 @@ async function main() {
   await cp(path.join(siteRoot, 'dist'), outDir, { recursive: true });
 
   await writeFile(path.join(outDir, 'robots.txt'), 'User-agent: *\nDisallow: /\n');
+  // Tells GitHub Pages (and anything else that honors the convention) to serve files/folders
+  // starting with an underscore as-is, rather than silently dropping them via Jekyll processing.
+  // Harmless on hosts that don't look for it (Cloudflare Pages, S3, a plain file server, ...).
+  await writeFile(path.join(outDir, '.nojekyll'), '');
 
   const indexPath = path.join(outDir, 'index.html');
   let html = await readFile(indexPath, 'utf-8');

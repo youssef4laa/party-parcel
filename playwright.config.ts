@@ -46,8 +46,8 @@ export default defineConfig({
       // own default browser is WebKit — real iPhones run WebKit too, so this is a closer proxy
       // for actual Mobile Safari than emulating touch on Chromium would be.
       name: 'mobile',
-      testMatch: /phone\.spec\.ts/,
-      use: { ...devices['iPhone 13'] },
+      testMatch: /(phone|export-subpath)\.spec\.ts/,
+      use: { ...devices['iPhone 13'], permissions: ['microphone', 'camera'] },
     },
     {
       // "Live voice recording on Safari/iOS and Chrome" (gift-readiness pass) — only run against

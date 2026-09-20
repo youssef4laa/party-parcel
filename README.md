@@ -139,9 +139,15 @@ blobs. Locally, `npx serve ./export/my-room` (or any static file server) is enou
 Music/SoundCloud/Vimeo *link* (as opposed to an uploaded file) embed a player from that
 provider's own site, and Location goodies with coordinates embed a live OpenStreetMap view —
 both still make requests to those third parties even in an otherwise fully static, offline-capable
-export. Goodies that use an *uploaded* file (photo, drawing, an uploaded song/video/voice
-recording) are fully self-contained in the exported folder and need no network access beyond the
-static host itself.
+export. The page also always loads its pixel fonts from Google Fonts, regardless of goodie
+content (same as the live app). Goodies that use an *uploaded* file (photo, drawing, an uploaded
+song/video/voice recording) are fully self-contained in the exported folder and need no network
+access beyond the static host itself. Verified with a real network-request audit — see
+`tests/export-subpath.spec.ts`.
+
+The export also works correctly when served from a subpath (e.g. `example.com/my-export/`, not
+just a domain root) — asset paths are relative, and a `.nojekyll` file is included for GitHub
+Pages.
 
 ## Learn more
 
