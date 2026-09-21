@@ -82,6 +82,8 @@ export default function RoomTokenPage({ token }: { token: string }) {
         // interaction open to admin/contribute/celebrate alike, unlike packing a box, which the
         // "+" button UI already restricts to canContribute — see DECISIONS.md.
         roomToken={token}
+        capabilities={room.capabilities}
+        isHost={role === 'admin'}
         onBoxClick={role === 'celebrate' ? handleBoxClick : undefined}
         handleRef={handleRef}
       />

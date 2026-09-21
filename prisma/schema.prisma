@@ -38,10 +38,81 @@ model Room {
   unlockedAt       DateTime?
   expiresAt        DateTime?
   createdAt        DateTime   @default(now())
+  /// JSON-encoded RoomPermissions (contributor/celebrant decorating rights, freeze-layout) —
+  /// see src/server/permissions.ts. Empty object means "defaults apply".
+  permissionsJson  String     @default("{}")
 
   boxes            Box[]
   photoboothShots  PhotoboothShot[]
   payments         Payment[]
+  objects          RoomObject[]
+  customItems      CustomItem[]
+}
+
+/// One placed scene element — a wall frame, a plant, a light, a custom-drawn sticker, etc.
+/// The room's entire visual layout is rows in this table, not hardcoded scene-builder code (see
+/// DECISIONS.md's Room Editor entry). A fresh room has none until first loaded, at which point
+/// the server seeds the default layout (src/server/defaultLayout.ts) — see resolveRoomObjects().
+model RoomObject {
+  id                   String    @id @default(cuid())
+  roomId               String
+  room                 Room      @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  /// Catalog key from src/room/objectCatalog.ts (e.g. "sofa", "cake", "string-lights") — see
+  /// RoomObjectKind in src/server/roomObjects.ts.
+  kind                 String
+  /// Set when this object renders a built-in procedural sprite (registry key into objectCatalog).
+  spriteKey            String?
+  /// Set when this object renders a room-library custom PNG/drawing instead (Phase 3).
+  assetId              String?
+  customItem           CustomItem? @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  x                    Float
+  y                    Float
+  /// Explicit stacking order for non-floor zones (bring forward / send back). Floor-zone objects
+  /// instead depth-sort by their own y at render time, regardless of this value — see
+  /// buildScene.ts.
+  z                    Int       @default(0)
+  scale                Float     @default(1)
+  flipX                Boolean   @default(false)
+  /// Degrees: 0, 90, 180, or 270 — enforced in src/goodies/../roomObjectSchema.ts, not just here.
+  rotation             Int       @default(0)
+  /// "floor" | "wall" | "ceiling" | "tabletop" | "anywhere" — see RoomZone in roomObjects.ts.
+  zone                 String
+  locked               Boolean   @default(false)
+  hidden               Boolean   @default(false)
+  /// Per-kind extra config as JSON (cake style/candles/text, neon sign text, etc.).
+  configJson           String    @default("{}")
+  /// "admin" | "contribute" | "celebrate" — the role that placed/created this object.
+  createdByRole        String
+  /// Hash of the contributor's browser session token (see src/server/contributorSession.ts) —
+  /// null for admin-created objects. Ownership for "own items only" permission checks.
+  createdBySessionHash String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([roomId])
+}
+
+/// A room's "My items" library — imported PNGs and hand-drawn pixel art (Phase 3). Stored once,
+/// placed as many RoomObjects as the room likes (RoomObject.assetId references this).
+model CustomItem {
+  id                   String       @id @default(cuid())
+  roomId               String
+  room                 Room         @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  storageKey           String
+  mime                 String
+  width                Int
+  height               Int
+  size                 Int
+  /// "import" | "drawing"
+  source               String
+  name                 String       @default("")
+  createdByRole        String
+  createdBySessionHash String?
+  createdAt            DateTime     @default(now())
+
+  objects              RoomObject[]
+
+  @@index([roomId])
 }
 
 model Box {

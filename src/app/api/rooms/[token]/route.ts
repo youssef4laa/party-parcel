@@ -2,12 +2,19 @@ import { NextRequest, NextResponse } from 'next/server';
 import { resolveRoomByToken } from '@/server/rooms';
 import { isRoomUnlocked } from '@/server/lock';
 import { jsonError } from '@/server/http';
+import { computeCapabilities, parsePermissions } from '@/server/permissions';
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const resolved = await resolveRoomByToken(token);
   if (!resolved) return jsonError(404, "This link doesn't exist (or was typed wrong).");
   const { room, role } = resolved;
+
+  const unlocked = isRoomUnlocked(room);
+  const permissions = parsePermissions(room.permissionsJson);
+  // Every role gets the capabilities list — it's a display hint (see permissions.ts), not the
+  // actual boundary, so there's no reason to hide it from any role.
+  const capabilities = computeCapabilities(role, permissions, unlocked);
 
   const base = {
     id: room.id,
@@ -19,14 +26,22 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
     bannerText: room.bannerText,
     eventAt: room.eventAt,
     timezone: room.timezone,
-    unlocked: isRoomUnlocked(room),
+    unlocked,
+    capabilities,
   };
 
   return NextResponse.json({
     role,
     room:
       role === 'admin'
-        ? { ...base, hostEmail: room.hostEmail, status: room.status, unlockedAt: room.unlockedAt, createdAt: room.createdAt }
+        ? {
+            ...base,
+            hostEmail: room.hostEmail,
+            status: room.status,
+            unlockedAt: room.unlockedAt,
+            createdAt: room.createdAt,
+            permissions,
+          }
         : base,
   });
 }

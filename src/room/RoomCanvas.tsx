@@ -8,13 +8,28 @@ import { attachPlacement } from './scene/placement';
 import { createBoxSprite, textureForDesign, animateSettle, attachHoverWobble } from './scene/presentBox';
 import { showLabel } from './scene/interactions/label';
 import type { PhotoWall } from './scene/interactions/photobooth';
+import { EditableObjectsLayer, isLegacyKind } from './scene/editableObjects';
 import { registerBannerText } from './manifest';
 import FrameModal from './ui/FrameModal';
 import PanHint from './ui/PanHint';
 import ContributeFlow from '@/contribute/ContributeFlow';
 import PhotoboothModal from '@/photobooth/PhotoboothModal';
 import PrintModal from '@/photobooth/PrintModal';
+import EditPanel from './edit/EditPanel';
 import { createStubDataSource } from '@/contribute/stubDataSource';
+import { getOrCreateSessionToken } from './contributorSession';
+import {
+  fetchRoomObjects,
+  createRoomObject,
+  updateRoomObject,
+  deleteRoomObject,
+  resetRoomObjects,
+  fetchRoomPermissions,
+  updateRoomPermissions,
+  type RoomObjectApi,
+  type RoomObjectPatch,
+  type RoomPermissions,
+} from './api';
 import type { RoomDataSource, PhotoboothShotView } from './dataSource';
 import type { BoxContribution, PlacedBox } from '@/contribute/types';
 
@@ -29,6 +44,13 @@ export type RoomCanvasProps = {
   canContribute?: boolean;
   /** Only meaningful with a real data source: enables real (content-sniffed, EXIF-stripped) uploads. */
   roomToken?: string;
+  /** From the room payload's `capabilities` list (src/server/permissions.ts) — a display hint
+   * only, gating whether the pencil/edit-mode UI even shows. Every server mutation re-checks the
+   * real rule independently, so this is never the actual security boundary. Room Editor is only
+   * available with a real `roomToken` — the localStorage demo/static-export sandboxes don't get
+   * it in this pass. */
+  capabilities?: string[];
+  isHost?: boolean;
   /** Custom handling for clicking an already-placed box (e.g. the celebrant's lock/unwrap flow).
    * Defaults to a simple "from {name}" label. */
   onBoxClick?: (box: PlacedBox) => void;
@@ -50,9 +72,14 @@ type Engine = {
   reducedMotion: boolean;
   boxSprites: Map<string, { sprite: Sprite; cleanup: () => void }>;
   photoWall: PhotoWall;
+  editableLayer: EditableObjectsLayer;
 };
 
 const UNDO_WINDOW_MS = 60_000;
+// A newly-added catalog item drops here — open floor between the wall props and the present
+// pile — rather than dead center, so it doesn't immediately overlap the table/cake.
+const ROOM_EDITOR_DEFAULT_X = 700;
+const ROOM_EDITOR_DEFAULT_Y = 650;
 
 export default function RoomCanvas({
   celebrantName = 'Alex',
@@ -62,6 +89,8 @@ export default function RoomCanvas({
   roomId = 'demo-room',
   canContribute = true,
   roomToken,
+  capabilities = [],
+  isHost = false,
   onBoxClick,
   handleRef,
 }: RoomCanvasProps) {
@@ -79,6 +108,38 @@ export default function RoomCanvas({
   const [photoboothOpen, setPhotoboothOpen] = useState(false);
   const [viewingShot, setViewingShot] = useState<PhotoboothShotView | null>(null);
   const shotsRef = useRef<PhotoboothShotView[]>([]);
+
+  // --- Room Editor state (docs/ROOM_EDITOR.md) — only meaningful with a real roomToken ---
+  const [objects, setObjects] = useState<RoomObjectApi[]>([]);
+  const objectsRef = useRef<RoomObjectApi[]>([]);
+  const [editMode, setEditMode] = useState(false);
+  // The panel's own ✕ only hides the panel — it must NOT drop edit mode itself, or dragging an
+  // object becomes impossible to reach again without reopening the panel first (a real bug: the
+  // panel used to sit on `onClose={() => setEditMode(false)}`, so closing it also turned off
+  // `node.eventMode` for every editable object). The pencil button clears this back to false
+  // whenever it turns edit mode on.
+  const [panelCollapsed, setPanelCollapsed] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [permissions, setPermissions] = useState<RoomPermissions | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [sessionToken] = useState<string | undefined>(() => (roomToken ? getOrCreateSessionToken(roomToken) : undefined));
+  const editModeRef = useRef(editMode);
+  const selectedIdRef = useRef(selectedId);
+
+  const syncObjects = useCallback((next: RoomObjectApi[]) => {
+    objectsRef.current = next;
+    setObjects(next);
+    const engine = engineRef.current;
+    if (engine) engine.editableLayer.setObjects(next, editModeRef.current, selectedIdRef.current);
+  }, []);
+  useEffect(() => {
+    editModeRef.current = editMode;
+    engineRef.current?.editableLayer.setObjects(objectsRef.current, editMode, selectedIdRef.current);
+  }, [editMode]);
+  useEffect(() => {
+    selectedIdRef.current = selectedId;
+    engineRef.current?.editableLayer.setObjects(objectsRef.current, editModeRef.current, selectedId);
+  }, [selectedId]);
 
   const placeBoxSprite = useCallback(
     (box: PlacedBox, animate: boolean) => {
@@ -105,6 +166,26 @@ export default function RoomCanvas({
       if (animate) animateSettle(sprite, engine.app.ticker, engine.reducedMotion);
     },
     [onBoxClick],
+  );
+
+  const handleObjectMoved = useCallback(
+    async (id: string, x: number, y: number) => {
+      if (!roomToken) return;
+      const existing = objectsRef.current.find((o) => o.id === id);
+      try {
+        const updated = await updateRoomObject(roomToken, sessionToken, id, {
+          x,
+          y,
+          expectedUpdatedAt: existing?.updatedAt,
+        });
+        syncObjects(objectsRef.current.map((o) => (o.id === id ? updated : o)));
+      } catch (e) {
+        setEditError(e instanceof Error ? e.message : 'Could not move that item.');
+        // snap back to the server's last-known position by re-rendering from current state
+        syncObjects(objectsRef.current);
+      }
+    },
+    [roomToken, sessionToken, syncObjects],
   );
 
   useEffect(() => {
@@ -157,14 +238,43 @@ export default function RoomCanvas({
       }));
       cleanupCamera = camera.destroy;
 
+      // Room Editor: fetch placed objects before building the scene, so hidden legacy kinds
+      // (buildScene.ts's SceneCallbacks.hiddenKinds) are correct from the very first paint.
+      let initialObjects: RoomObjectApi[] = [];
+      if (roomToken) {
+        try {
+          initialObjects = await fetchRoomObjects(roomToken);
+          if (!destroyed) {
+            objectsRef.current = initialObjects;
+            setObjects(initialObjects);
+          }
+        } catch {
+          // a failed initial objects fetch shouldn't block rendering the room — it just means
+          // no editable items/hidden-legacy state until the next successful fetch
+        }
+      }
+      const hiddenKinds = new Set(initialObjects.filter((o) => o.hidden && isLegacyKind(o.kind)).map((o) => o.kind));
+
       cleanupScene = buildScene(application, world, camera.drag, {
         onEnlargeFrame: setEnlargedFrame,
         onOpenPhotobooth: () => setPhotoboothOpen(true),
         onTapPrint: (shot) => setViewingShot(shot),
         reducedMotion,
+        hiddenKinds,
       });
 
       const placement = attachPlacement(application, camera);
+
+      const editableLayer = new EditableObjectsLayer(
+        world,
+        camera.drag,
+        () => camera.getScale(),
+        (id) => setSelectedId(id),
+        (id, x, y) => {
+          void handleObjectMoved(id, x, y);
+        },
+      );
+      editableLayer.setObjects(initialObjects, editModeRef.current, selectedIdRef.current);
 
       engineRef.current = {
         app: application,
@@ -174,6 +284,7 @@ export default function RoomCanvas({
         reducedMotion,
         boxSprites: new Map(),
         photoWall: cleanupScene.photoWall,
+        editableLayer,
       };
 
       try {
@@ -211,12 +322,98 @@ export default function RoomCanvas({
       cleanupScene?.destroy();
       cleanupCamera?.();
       engineRef.current?.placement.destroy();
+      engineRef.current?.editableLayer.destroy();
       engineRef.current = null;
       if (app) {
         app.destroy(true, { children: true });
       }
     };
-  }, [bannerText, placeBoxSprite, source, handleRef]);
+  }, [bannerText, placeBoxSprite, source, handleRef, roomToken, handleObjectMoved]);
+
+  useEffect(() => {
+    if (!isHost || !roomToken) return;
+    fetchRoomPermissions(roomToken)
+      .then((p) => setPermissions(p))
+      .catch(() => {
+        // host-only fetch; a failure just means the Permissions tab shows "Loading…" — not
+        // worth surfacing as a blocking error for a tab that might never be opened
+      });
+  }, [isHost, roomToken]);
+
+  const handleAddItem = useCallback(
+    async (kind: string) => {
+      if (!roomToken) return;
+      setEditError(null);
+      try {
+        const created = await createRoomObject(roomToken, sessionToken, {
+          kind,
+          x: ROOM_EDITOR_DEFAULT_X,
+          y: ROOM_EDITOR_DEFAULT_Y,
+          zone: 'anywhere',
+        });
+        syncObjects([...objectsRef.current, created]);
+        setSelectedId(created.id);
+      } catch (e) {
+        setEditError(e instanceof Error ? e.message : 'Could not add that item.');
+      }
+    },
+    [roomToken, sessionToken, syncObjects],
+  );
+
+  const handleUpdateSelected = useCallback(
+    async (patch: RoomObjectPatch) => {
+      if (!roomToken || !selectedId) return;
+      const existing = objectsRef.current.find((o) => o.id === selectedId);
+      setEditError(null);
+      try {
+        const updated = await updateRoomObject(roomToken, sessionToken, selectedId, {
+          ...patch,
+          expectedUpdatedAt: existing?.updatedAt,
+        });
+        syncObjects(objectsRef.current.map((o) => (o.id === selectedId ? updated : o)));
+      } catch (e) {
+        setEditError(e instanceof Error ? e.message : 'Could not update that item.');
+      }
+    },
+    [roomToken, sessionToken, selectedId, syncObjects],
+  );
+
+  const handleDeleteSelected = useCallback(async () => {
+    if (!roomToken || !selectedId) return;
+    setEditError(null);
+    try {
+      await deleteRoomObject(roomToken, sessionToken, selectedId);
+      syncObjects(objectsRef.current.filter((o) => o.id !== selectedId));
+      setSelectedId(null);
+    } catch (e) {
+      setEditError(e instanceof Error ? e.message : 'Could not delete that item.');
+    }
+  }, [roomToken, sessionToken, selectedId, syncObjects]);
+
+  const handleResetLayout = useCallback(async () => {
+    if (!roomToken) return;
+    setEditError(null);
+    try {
+      const next = await resetRoomObjects(roomToken);
+      syncObjects(next);
+      setSelectedId(null);
+    } catch (e) {
+      setEditError(e instanceof Error ? e.message : 'Could not reset the layout.');
+    }
+  }, [roomToken, syncObjects]);
+
+  const handleSavePermissions = useCallback(
+    async (next: RoomPermissions) => {
+      if (!roomToken) return;
+      setEditError(null);
+      try {
+        setPermissions(await updateRoomPermissions(roomToken, next));
+      } catch (e) {
+        setEditError(e instanceof Error ? e.message : 'Could not save permissions.');
+      }
+    },
+    [roomToken],
+  );
 
   const commitPlacement = useCallback(
     async (contribution: BoxContribution, x: number, y: number) => {
@@ -300,6 +497,62 @@ export default function RoomCanvas({
         >
           +
         </button>
+      )}
+
+      {/* Room Editor (docs/ROOM_EDITOR.md 1b): rendered only when the room payload's
+          capabilities list grants it — but this is a display hint, never the actual boundary;
+          every mutation route re-checks the real rule independently regardless of whether this
+          button is even shown. */}
+      {ready && roomToken && capabilities.includes('objects:edit-mode') && !placingHint && (
+        <button
+          type="button"
+          onClick={() => {
+            // Off → on: enter edit mode with the panel showing. On + panel hidden: bring the
+            // panel back without dropping edit mode. On + panel showing: this is the "I'm done"
+            // gesture, so exit edit mode entirely.
+            if (!editMode) {
+              setEditMode(true);
+              setPanelCollapsed(false);
+            } else if (panelCollapsed) {
+              setPanelCollapsed(false);
+            } else {
+              setEditMode(false);
+            }
+          }}
+          aria-label={editMode && !panelCollapsed ? 'Exit edit mode' : 'Edit room'}
+          aria-pressed={editMode}
+          className={`absolute top-3 flex h-10 w-10 items-center justify-center border-4 font-pixel text-base shadow-[3px_3px_0_rgba(0,0,0,0.35)] ${
+            canContribute ? 'right-16' : 'right-3'
+          } ${editMode ? 'border-[#ff3d8b] bg-[#ff3d8b] text-[#fff6d5]' : 'border-[#ff3d8b] bg-[#fff6d5] text-[#ff3d8b] hover:bg-[#ff3d8b] hover:text-[#fff6d5]'}`}
+        >
+          ✏️
+        </button>
+      )}
+
+      {editMode && roomToken && !panelCollapsed && (
+        <EditPanel
+          capabilities={capabilities}
+          objects={objects}
+          selectedId={selectedId}
+          onSelect={setSelectedId}
+          onAddItem={handleAddItem}
+          onUpdateSelected={handleUpdateSelected}
+          onDeleteSelected={handleDeleteSelected}
+          onResetLayout={handleResetLayout}
+          onClose={() => setPanelCollapsed(true)}
+          isHost={isHost}
+          permissions={permissions}
+          onSavePermissions={handleSavePermissions}
+        />
+      )}
+
+      {editError && (
+        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 border-2 border-[#ff3d8b] bg-[#fff6d5] px-3 py-2 font-mono text-sm text-[#5e3620]">
+          {editError}
+          <button type="button" onClick={() => setEditError(null)} className="ml-2 underline">
+            dismiss
+          </button>
+        </div>
       )}
 
       {placingHint && (

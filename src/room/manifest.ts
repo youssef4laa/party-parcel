@@ -14,6 +14,23 @@ import { drawTable, drawChair, drawCupcakeStand, drawVase, drawSnackBowl, drawCu
 import { drawCake, drawSmokePuff } from './sprites/cake';
 import { drawBalloon, drawBalloonPop, type BalloonColor } from './sprites/balloon';
 import { drawCat, drawMeowBubble, type CatPose } from './sprites/cat';
+import {
+  drawSofa,
+  drawArmchair,
+  drawBookshelf,
+  drawSideTable,
+  drawBeanBag,
+  drawPottedPlant,
+  drawTallTree,
+  drawPineTree,
+  drawStringLights,
+  drawFloorLamp,
+  drawNeonSign,
+  drawStreamers,
+  drawBalloonCluster,
+  drawPinata,
+  drawPartyHat,
+} from './sprites/decor';
 
 /**
  * Sprite manifest: every sprite the room can render, resolved today by a
@@ -49,6 +66,24 @@ const registry: Record<string, DrawFn> = {
   smokePuff: drawSmokePuff,
   meowBubble: drawMeowBubble,
   balloonPop: drawBalloonPop,
+
+  // Room Editor catalog (docs/ROOM_EDITOR.md 1c) — new placeable items
+  sofa: drawSofa,
+  armchair: drawArmchair,
+  bookshelf: drawBookshelf,
+  'side-table': drawSideTable,
+  'bean-bag': drawBeanBag,
+  'potted-plant': drawPottedPlant,
+  'tall-tree': drawTallTree,
+  'pine-tree': drawPineTree,
+  'string-lights': () => drawStringLights(40),
+  'paper-lantern-decor': drawLantern,
+  'floor-lamp': drawFloorLamp,
+  'neon-sign': drawNeonSign,
+  streamers: () => drawStreamers(30),
+  'balloon-cluster': drawBalloonCluster,
+  pinata: drawPinata,
+  'party-hat': drawPartyHat,
 };
 
 const balloonColors: BalloonColor[] = ['purple', 'red', 'green', 'yellow', 'orange', 'pink'];

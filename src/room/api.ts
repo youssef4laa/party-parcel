@@ -12,10 +12,27 @@ export type RoomInfo = {
   eventAt: string;
   timezone: string;
   unlocked: boolean;
+  /** Display hint only — every mutation route re-checks the real rule server-side regardless of
+   * what this says. See src/server/permissions.ts. */
+  capabilities: string[];
   hostEmail?: string;
   status?: string;
   unlockedAt?: string | null;
   createdAt?: string;
+  permissions?: RoomPermissions;
+};
+
+export type DecorateLevel = 'off' | 'own' | 'any';
+export type RoomPermissions = {
+  contributors: {
+    canDecorate: DecorateLevel;
+    canImport: boolean;
+    canDraw: boolean;
+    canMoveOwnPresents: boolean;
+    maxItemsPerContributor: number;
+  };
+  celebrant: { canRearrange: boolean };
+  freezeLayout: boolean;
 };
 
 export type RoomRole = 'admin' | 'contribute' | 'celebrate';
@@ -178,4 +195,119 @@ export function toPlacedBox(b: PlacedBoxApi): PlacedBox {
     placedAt: Date.parse(b.placedAt),
     opened: b.opened,
   };
+}
+
+// --- Room Editor (docs/ROOM_EDITOR.md) ---
+
+export type RoomObjectApi = {
+  id: string;
+  kind: string;
+  x: number;
+  y: number;
+  z: number;
+  scale: number;
+  flipX: boolean;
+  rotation: number;
+  zone: string;
+  locked: boolean;
+  hidden: boolean;
+  configJson: string;
+  createdByRole: string;
+  createdBySessionHash: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+function objectHeaders(sessionToken: string | undefined): HeadersInit {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (sessionToken) headers['X-Contributor-Session'] = sessionToken;
+  return headers;
+}
+
+export async function fetchRoomObjects(token: string) {
+  const res = await fetch(`/api/rooms/${token}/objects`);
+  const data = await asJson<{ objects: RoomObjectApi[] }>(res);
+  return data.objects;
+}
+
+export async function createRoomObject(
+  token: string,
+  sessionToken: string | undefined,
+  input: {
+    kind: string;
+    x: number;
+    y: number;
+    zone: string;
+    z?: number;
+    scale?: number;
+    flipX?: boolean;
+    rotation?: number;
+    configJson?: string;
+  },
+) {
+  const res = await fetch(`/api/rooms/${token}/objects`, {
+    method: 'POST',
+    headers: objectHeaders(sessionToken),
+    body: JSON.stringify(input),
+  });
+  const data = await asJson<{ object: RoomObjectApi }>(res);
+  return data.object;
+}
+
+export type RoomObjectPatch = Partial<{
+  x: number;
+  y: number;
+  z: number;
+  scale: number;
+  flipX: boolean;
+  rotation: number;
+  locked: boolean;
+  hidden: boolean;
+  configJson: string;
+  expectedUpdatedAt: string;
+}>;
+
+export async function updateRoomObject(
+  token: string,
+  sessionToken: string | undefined,
+  objectId: string,
+  patch: RoomObjectPatch,
+) {
+  const res = await fetch(`/api/rooms/${token}/objects/${objectId}`, {
+    method: 'PATCH',
+    headers: objectHeaders(sessionToken),
+    body: JSON.stringify(patch),
+  });
+  const data = await asJson<{ object: RoomObjectApi }>(res);
+  return data.object;
+}
+
+export async function deleteRoomObject(token: string, sessionToken: string | undefined, objectId: string) {
+  const res = await fetch(`/api/rooms/${token}/objects/${objectId}`, {
+    method: 'DELETE',
+    headers: objectHeaders(sessionToken),
+  });
+  return asJson<{ ok: true }>(res);
+}
+
+export async function resetRoomObjects(token: string) {
+  const res = await fetch(`/api/rooms/${token}/objects/reset`, { method: 'POST' });
+  const data = await asJson<{ objects: RoomObjectApi[] }>(res);
+  return data.objects;
+}
+
+export async function fetchRoomPermissions(token: string) {
+  const res = await fetch(`/api/rooms/${token}/permissions`);
+  const data = await asJson<{ permissions: RoomPermissions }>(res);
+  return data.permissions;
+}
+
+export async function updateRoomPermissions(token: string, permissions: RoomPermissions) {
+  const res = await fetch(`/api/rooms/${token}/permissions`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(permissions),
+  });
+  const data = await asJson<{ permissions: RoomPermissions }>(res);
+  return data.permissions;
 }
