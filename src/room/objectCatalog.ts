@@ -67,6 +67,8 @@ const catalog: CatalogEntry[] = [
   { key: 'string-lights', label: 'String lights', category: 'lights', defaultZone: 'ceiling' },
   { key: 'paper-lantern-decor', label: 'Paper lantern', category: 'lights', defaultZone: 'ceiling' },
   { key: 'floor-lamp', label: 'Floor lamp', category: 'lights', defaultZone: 'floor' },
+  { key: 'table-lamp', label: 'Table lamp', category: 'lights', defaultZone: 'tabletop' },
+  { key: 'disco-ball', label: 'Disco ball', category: 'lights', defaultZone: 'ceiling' },
   { key: 'neon-sign', label: 'Neon sign', category: 'lights', defaultZone: 'wall', configurable: true },
 
   // --- Party decor (Phase 1c) ---

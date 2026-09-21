@@ -3,12 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Application, Container, Sprite } from 'pixi.js';
 import { attachCamera } from './scene/camera';
-import { buildScene } from './scene/buildScene';
+import { buildScene, mountBackground } from './scene/buildScene';
 import { attachPlacement } from './scene/placement';
 import { createBoxSprite, textureForDesign, animateSettle, attachHoverWobble } from './scene/presentBox';
 import { showLabel } from './scene/interactions/label';
-import type { PhotoWall } from './scene/interactions/photobooth';
-import { EditableObjectsLayer, isLegacyKind } from './scene/editableObjects';
+import { PhotoWall } from './scene/interactions/photobooth';
+import { EditableObjectsLayer } from './scene/editableObjects';
+import { demoLayoutObjects } from './scene/demoObjects';
 import { registerBannerText } from './manifest';
 import FrameModal from './ui/FrameModal';
 import PanHint from './ui/PanHint';
@@ -96,6 +97,10 @@ export default function RoomCanvas({
 }: RoomCanvasProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const engineRef = useRef<Engine | null>(null);
+  // The interactive/animated legacy scene (buildScene.ts) — a ref, not engine state, because it's
+  // torn down and rebuilt independently of the rest of the engine whenever edit mode toggles (see
+  // the effect below), while everything else in `engineRef` lives for the whole component mount.
+  const legacySceneRef = useRef<{ destroy: () => void } | null>(null);
   const [source] = useState<RoomDataSource>(() => dataSource ?? createStubDataSource(roomId));
   const deleteTokensRef = useRef<Map<string, string>>(new Map());
   const designsRef = useRef<Map<string, PlacedBox['design']>>(new Map());
@@ -194,7 +199,7 @@ export default function RoomCanvas({
 
     let destroyed = false;
     let app: Application | null = null;
-    let cleanupScene: { destroy: () => void; photoWall: PhotoWall } | null = null;
+    let photoWallInstance: PhotoWall | null = null;
     let cleanupCamera: (() => void) | null = null;
 
     async function init() {
@@ -229,6 +234,7 @@ export default function RoomCanvas({
 
       const world = new Container();
       application.stage.addChild(world);
+      mountBackground(world);
 
       const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -238,9 +244,11 @@ export default function RoomCanvas({
       }));
       cleanupCamera = camera.destroy;
 
-      // Room Editor: fetch placed objects before building the scene, so hidden legacy kinds
-      // (buildScene.ts's SceneCallbacks.hiddenKinds) are correct from the very first paint.
-      let initialObjects: RoomObjectApi[] = [];
+      // Room Editor: fetch placed objects before building the scene, so the very first paint
+      // already reflects real positions/hidden state. The "/" sandbox and the static export have
+      // no roomToken (no real RoomObject rows to fetch at all — see demoObjects.ts) and fall back
+      // to the same default layout a brand-new real room seeds.
+      let initialObjects: RoomObjectApi[] = roomToken ? [] : demoLayoutObjects();
       if (roomToken) {
         try {
           initialObjects = await fetchRoomObjects(roomToken);
@@ -249,19 +257,26 @@ export default function RoomCanvas({
             setObjects(initialObjects);
           }
         } catch {
-          // a failed initial objects fetch shouldn't block rendering the room — it just means
-          // no editable items/hidden-legacy state until the next successful fetch
+          // a failed initial objects fetch shouldn't block rendering the room — it just means an
+          // empty (no legacy elements, no editable items) scene until the next successful fetch
         }
       }
-      const hiddenKinds = new Set(initialObjects.filter((o) => o.hidden && isLegacyKind(o.kind)).map((o) => o.kind));
 
-      cleanupScene = buildScene(application, world, camera.drag, {
+      // The interactive/animated legacy scene (window, cake, cat, ...) — torn down and rebuilt by
+      // the editMode-toggle effect below, never rendered at the same time as edit mode's plain
+      // draggable version of the same rows (EditableObjectsLayer). See buildScene's SceneCallbacks
+      // doc comment.
+      legacySceneRef.current = buildScene(application, world, camera.drag, {
         onEnlargeFrame: setEnlargedFrame,
         onOpenPhotobooth: () => setPhotoboothOpen(true),
-        onTapPrint: (shot) => setViewingShot(shot),
         reducedMotion,
-        hiddenKinds,
+        objects: initialObjects,
       });
+
+      // The photo-print wall isn't a catalog/RoomObject item (docs/ROOM_EDITOR.md never mentions
+      // it) — it's always-present infrastructure beside the camera prop, so it's built once here,
+      // independent of the legacy-scene rebuild cycle, and never torn down until unmount.
+      photoWallInstance = new PhotoWall(world, 610, 90, (shot) => setViewingShot(shot));
 
       const placement = attachPlacement(application, camera);
 
@@ -269,6 +284,7 @@ export default function RoomCanvas({
         world,
         camera.drag,
         () => camera.getScale(),
+        application.ticker,
         (id) => setSelectedId(id),
         (id, x, y) => {
           void handleObjectMoved(id, x, y);
@@ -283,7 +299,7 @@ export default function RoomCanvas({
         placement,
         reducedMotion,
         boxSprites: new Map(),
-        photoWall: cleanupScene.photoWall,
+        photoWall: photoWallInstance,
         editableLayer,
       };
 
@@ -297,7 +313,7 @@ export default function RoomCanvas({
       try {
         const shots = await source.photobooth.list();
         shotsRef.current = shots;
-        if (!destroyed) await cleanupScene.photoWall.setShots(shots);
+        if (!destroyed) await photoWallInstance.setShots(shots);
       } catch {
         // a failed initial photo-wall fetch shouldn't block rendering the room either
       }
@@ -319,7 +335,9 @@ export default function RoomCanvas({
 
     return () => {
       destroyed = true;
-      cleanupScene?.destroy();
+      legacySceneRef.current?.destroy();
+      legacySceneRef.current = null;
+      photoWallInstance?.destroy();
       cleanupCamera?.();
       engineRef.current?.placement.destroy();
       engineRef.current?.editableLayer.destroy();
@@ -329,6 +347,32 @@ export default function RoomCanvas({
       }
     };
   }, [bannerText, placeBoxSprite, source, handleRef, roomToken, handleObjectMoved]);
+
+  // Rebuilds the interactive/animated legacy scene whenever edit mode toggles off (or, on the
+  // very first render, is skipped — the main init effect above already built it once). Turning
+  // edit mode ON tears it down with no replacement here (EditableObjectsLayer, always mounted,
+  // takes over rendering the same rows as plain draggable nodes for the duration); turning it OFF
+  // rebuilds it fresh from whatever `objectsRef.current` holds at that moment — which reflects
+  // every move/resize/hide made while editing, since those mutations update it as they land.
+  const skippedFirstEditModeToggle = useRef(false);
+  useEffect(() => {
+    if (!skippedFirstEditModeToggle.current) {
+      skippedFirstEditModeToggle.current = true;
+      return;
+    }
+    const engine = engineRef.current;
+    if (!engine) return;
+    legacySceneRef.current?.destroy();
+    legacySceneRef.current = null;
+    if (!editMode) {
+      legacySceneRef.current = buildScene(engine.app, engine.world, engine.camera.drag, {
+        onEnlargeFrame: setEnlargedFrame,
+        onOpenPhotobooth: () => setPhotoboothOpen(true),
+        reducedMotion: engine.reducedMotion,
+        objects: objectsRef.current,
+      });
+    }
+  }, [editMode]);
 
   useEffect(() => {
     if (!isHost || !roomToken) return;

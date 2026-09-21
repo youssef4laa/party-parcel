@@ -123,6 +123,31 @@ export function drawFloorLamp() {
   return g.canvas;
 }
 
+export function drawTableLamp() {
+  const g = createPixelCanvas(10, 14, unit);
+  g.px(3, 12, 4, 1.5, '#5a5a62');
+  g.px(4.5, 8, 1, 4, '#7a7a82');
+  g.px(1, 1, 8, 7, '#ffd9a0');
+  g.px(1.5, 1, 7, 1, '#ffe9c0');
+  g.pborder(1, 1, 8, 7, '#d9a866');
+  return g.canvas;
+}
+
+export function drawDiscoBall() {
+  const g = createPixelCanvas(14, 18, unit);
+  g.px(6.5, 0, 1, 3, '#7a7a82');
+  g.pcircle(7, 10, 6, '#c9ccd6');
+  const mirrorRows = [6, 8, 10, 12, 14];
+  for (const y of mirrorRows) {
+    for (let x = 1.5; x < 13; x += 2) {
+      g.px(x, y, 1.3, 1.3, (x + y) % 4 < 2 ? '#eef0f6' : '#9a9fb0');
+    }
+  }
+  g.pcircle(4.5, 7, 1.4, '#ffffff');
+  g.pborder(1, 4, 12, 12, p.outline);
+  return g.canvas;
+}
+
 export function drawNeonSign() {
   const g = createPixelCanvas(40, 12, unit);
   g.pborder(0, 0, 40, 12, '#3a1a4a');

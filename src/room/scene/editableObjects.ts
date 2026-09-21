@@ -1,5 +1,6 @@
-import { Container, FederatedPointerEvent, Graphics, Sprite } from 'pixi.js';
+import { Container, FederatedPointerEvent, Graphics, Sprite, Ticker } from 'pixi.js';
 import { getTexture, anchorFor, manifestKeyFor, dynamicTextureFor } from './objectSprites';
+import { parseObjectConfig } from './objectConfig';
 import type { DragState } from './camera';
 
 export type RoomObjectData = {
@@ -20,9 +21,14 @@ export type RoomObjectData = {
   updatedAt: string;
 };
 
-/** The ~20 scene elements still rendered by buildScene.ts's hardcoded layout (see its
- * SceneCallbacks.hiddenKinds comment) — this layer renders every *other* kind, i.e. every new
- * catalog item added through the editor (and, from Phase 3 on, custom imported/drawn items). */
+/** The original ~20 scene elements (window, banner, garlands, cake, cat, ...) — these render two
+ * different ways depending on edit mode, and never both at once (see RoomCanvas.tsx's
+ * `legacySceneRef` effect): in view mode, buildScene.ts renders them with their full
+ * animated/interactive behavior (cake toggles, cat wanders, ...), positioned from this same
+ * RoomObject data; in edit mode, buildScene's interactive scene is torn down and THIS layer
+ * renders them instead, as plain static/draggable nodes — same as every catalog item, just with
+ * no click-to-toggle/wander/etc. while you're rearranging. `isLegacyKind` is what `setObjects`
+ * below uses to decide whether a kind belongs to this dual-render group at all. */
 const LEGACY_KINDS = new Set([
   'rug', 'frame-mountain', 'frame-tulip', 'camera', 'window', 'curtain-left', 'curtain-right',
   'banner', 'garland', 'lantern', 'star', 'table', 'chair', 'cake', 'cupcake-stand', 'vase',
@@ -32,6 +38,11 @@ const LEGACY_KINDS = new Set([
 export function isLegacyKind(kind: string): boolean {
   return LEGACY_KINDS.has(kind);
 }
+
+/** Catalog (non-legacy) kinds with a subtle idle animation even outside edit mode — a fairy-light
+ * twinkle, say. Only ever touches `.alpha`, never position/rotation/scale, so it can never fight
+ * the drag/transform system the way animating those would. */
+const AMBIENT_ALPHA_TWINKLE_KINDS = new Set(['string-lights']);
 
 const BASE_UNIT_PX = 4; // matches every sprite's own `unit` — used for the selection outline only
 
@@ -52,11 +63,13 @@ export class EditableObjectsLayer {
   private nodes = new Map<string, Container>();
   private selectionBoxes = new Map<string, Graphics>();
   private nodeStates = new Map<string, NodeState>();
+  private ambientTickers = new Map<string, (ticker: Ticker) => void>();
 
   constructor(
     world: Container,
     private drag: DragState,
     private getScale: () => number,
+    private ticker: Ticker,
     private onSelect: (id: string | null) => void,
     private onDragEnd: (id: string, x: number, y: number) => void,
   ) {
@@ -64,8 +77,11 @@ export class EditableObjectsLayer {
     world.addChild(this.container);
   }
 
+  /** In view mode, legacy kinds are excluded — buildScene.ts renders those instead, with their
+   * full interactive/animated behavior. In edit mode, every non-hidden kind (legacy included)
+   * renders here as a plain draggable node. See the LEGACY_KINDS comment above. */
   setObjects(objects: RoomObjectData[], editMode: boolean, selectedId: string | null) {
-    const visible = objects.filter((o) => !isLegacyKind(o.kind) && !o.hidden);
+    const visible = objects.filter((o) => !o.hidden && (editMode || !isLegacyKind(o.kind)));
     const seen = new Set<string>();
 
     for (const obj of visible) {
@@ -98,18 +114,18 @@ export class EditableObjectsLayer {
         this.nodes.delete(id);
         this.selectionBoxes.delete(id);
         this.nodeStates.delete(id);
+        const ambientFn = this.ambientTickers.get(id);
+        if (ambientFn) {
+          this.ticker.remove(ambientFn);
+          this.ambientTickers.delete(id);
+        }
       }
     }
   }
 
   private buildNode(obj: RoomObjectData): { node: Container; selectionBox: Graphics } {
     const node = new Container();
-    let config: Record<string, unknown> = {};
-    try {
-      config = JSON.parse(obj.configJson || '{}');
-    } catch {
-      config = {};
-    }
+    const config = parseObjectConfig(obj.configJson);
     const dynamicTex = dynamicTextureFor(obj.kind, config);
     const texture = dynamicTex ?? getTexture(manifestKeyFor(obj.kind));
     const sprite = new Sprite(texture);
@@ -131,6 +147,16 @@ export class EditableObjectsLayer {
     };
     this.nodeStates.set(obj.id, state);
     this.attachPersistentHandlers(node, state);
+
+    if (AMBIENT_ALPHA_TWINKLE_KINDS.has(obj.kind)) {
+      let t = Math.random() * 10;
+      const tickerFn = (ticker: Ticker) => {
+        t += ticker.deltaMS / 1000;
+        sprite.alpha = 0.75 + Math.sin(t * 1.4) * 0.25;
+      };
+      this.ticker.add(tickerFn);
+      this.ambientTickers.set(obj.id, tickerFn);
+    }
 
     return { node, selectionBox };
   }
@@ -201,6 +227,8 @@ export class EditableObjectsLayer {
   }
 
   destroy() {
+    for (const fn of this.ambientTickers.values()) this.ticker.remove(fn);
+    this.ambientTickers.clear();
     this.container.destroy({ children: true });
     this.nodes.clear();
     this.selectionBoxes.clear();

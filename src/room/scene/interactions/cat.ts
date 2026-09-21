@@ -1,6 +1,6 @@
 import { Container, Sprite, Ticker } from 'pixi.js';
 import { getTexture } from '../../manifest';
-import { ROOM_WIDTH, FLOOR_TOP } from '../../constants';
+import { ROOM_WIDTH } from '../../constants';
 import type { DragState } from '../camera';
 import { showLabel } from './label';
 
@@ -10,6 +10,8 @@ const MAX_X = ROOM_WIDTH - 260;
 const WALK_SPEED = 55; // world px/s
 
 type Mode = 'walk' | 'idle' | 'sit' | 'hop';
+
+export type CatSpawn = { x: number; y: number; scale: number };
 
 /** Autonomous wandering ginger cat: walks back and forth, pauses, sits, and reacts to clicks/hover. */
 export class CatController {
@@ -21,14 +23,29 @@ export class CatController {
   private walkFrame = 0;
   private hopT = 0;
   private baseY: number;
+  private baseScale: number;
   private tickerFn: (t: Ticker) => void;
   private removeLabel: (() => void) | null = null;
 
-  constructor(private world: Container, private ticker: Ticker, drag: DragState, private reducedMotion: boolean) {
+  /**
+   * `spawn` is the RoomObject row's own x/y/scale (docs/ROOM_EDITOR.md 1a's "at least make
+   * position, scale, and hide work" escape hatch — a fully autonomous wanderer can't sensibly
+   * *track* a stored position frame-by-frame, but it starts from wherever it was dropped and
+   * keeps roaming the same room-wide corridor from there; see DECISIONS.md).
+   */
+  constructor(
+    private world: Container,
+    private ticker: Ticker,
+    drag: DragState,
+    private reducedMotion: boolean,
+    spawn: CatSpawn,
+  ) {
     this.sprite = new Sprite(getTexture('cat_idle'));
     this.sprite.anchor.set(0.5, 1);
-    this.baseY = FLOOR_TOP + 34;
-    this.sprite.position.set((MIN_X + MAX_X) / 2, this.baseY);
+    this.baseY = spawn.y;
+    this.baseScale = spawn.scale;
+    this.sprite.scale.set(this.baseScale);
+    this.sprite.position.set(spawn.x, this.baseY);
     this.sprite.eventMode = 'static';
     this.sprite.cursor = 'pointer';
     this.sprite.accessible = true;
@@ -108,7 +125,7 @@ export class CatController {
       this.sprite.x += this.dir * WALK_SPEED * dt;
       if (this.sprite.x < MIN_X) { this.sprite.x = MIN_X; this.dir = 1; }
       if (this.sprite.x > MAX_X) { this.sprite.x = MAX_X; this.dir = -1; }
-      this.sprite.scale.x = this.dir >= 0 ? Math.abs(this.sprite.scale.x) : -Math.abs(this.sprite.scale.x);
+      this.sprite.scale.x = this.dir >= 0 ? this.baseScale : -this.baseScale;
       this.walkFrameTimer += dt;
       if (this.walkFrameTimer > 0.22) {
         this.walkFrameTimer = 0;

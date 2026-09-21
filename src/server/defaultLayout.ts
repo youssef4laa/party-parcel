@@ -98,7 +98,11 @@ export function defaultLayout(): DefaultLayoutItem[] {
     }),
   );
 
-  items.push({ kind: 'cat', x: 400, y: 600, z: 0, zone: 'floor' });
+  // Matches the original CatController's fixed spawn point ((MIN_X+MAX_X)/2, FLOOR_TOP+34) —
+  // now just this row's starting x/y instead of a hardcoded constant (see DECISIONS.md: an
+  // autonomous wanderer can't sensibly track a stored position every frame, but it spawns from
+  // and keeps roaming around wherever this is).
+  items.push({ kind: 'cat', x: 1180, y: 634, z: 0, zone: 'floor' });
 
   return items;
 }

@@ -1,34 +1,44 @@
 import { Application, Container, Sprite } from 'pixi.js';
 import { getTexture } from '../manifest';
-import { ROOM_WIDTH, ROOM_HEIGHT, WINDOW_X, TABLE_X, TABLE_Y } from '../constants';
+import { manifestKeyFor, anchorFor } from './objectSprites';
+import { parseObjectConfig } from './objectConfig';
 import type { DragState } from './camera';
 import { CatController } from './interactions/cat';
 import { attachBalloon } from './interactions/balloon';
 import { attachStar } from './interactions/star';
 import { attachCake } from './interactions/cake';
 import { attachFrame } from './interactions/frame';
-import { attachCameraTrigger, PhotoWall } from './interactions/photobooth';
-import type { PhotoboothShotView } from '../dataSource';
+import { attachCameraTrigger } from './interactions/photobooth';
+import type { RoomObjectData } from './editableObjects';
 
 export type SceneCallbacks = {
   onEnlargeFrame: (subject: 'mountain' | 'tulip') => void;
   onCakeToggle?: (lit: boolean) => void;
   onOpenPhotobooth: () => void;
-  onTapPrint: (shot: PhotoboothShotView) => void;
   reducedMotion: boolean;
   /**
-   * Room Editor (docs/ROOM_EDITOR.md 1a): kinds a RoomObject row has marked `hidden`. Every
-   * legacy scene element (window, banner, garland, ...) still renders from this same hardcoded
-   * layout function — rewriting it to be fully position/scale-driven from RoomObject data is the
-   * next real step (see DECISIONS.md's Room Editor entry for why this pass stops short of that)
-   * — but "hidden" is real and enforced here: a hidden kind's sprite (and its interaction) is
-   * skipped entirely, not just visually hidden. Multi-instance kinds (garland/star/balloon) hide
-   * as a whole group in this pass, not per-instance — also logged as a known limitation.
+   * Room Editor (docs/ROOM_EDITOR.md 1a): every legacy scene element (window, banner, garlands,
+   * cake, cat, ...) is now a real RoomObject row, and this is the *interactive, animated* render
+   * of them — position/scale/rotation/flip all come from here, a hidden row is skipped entirely,
+   * and each row gets its own sprite + interaction attached at ITS OWN position (so a click target
+   * follows the sprite after it's been moved). Only rendered while edit mode is off; while editing,
+   * RoomCanvas.tsx tears this down and EditableObjectsLayer renders the same rows as plain
+   * draggable nodes instead — see its LEGACY_KINDS comment for why these never coexist.
    */
-  hiddenKinds: Set<string>;
+  objects: RoomObjectData[];
 };
 
-function sprite(key: string, x: number, y: number, opts: Partial<{ anchorX: number; anchorY: number; scale: number }> = {}) {
+function spriteFor(obj: RoomObjectData, textureKey?: string) {
+  const s = new Sprite(getTexture(textureKey ?? manifestKeyFor(obj.kind)));
+  const anchor = anchorFor(obj.kind, obj.zone);
+  s.anchor.set(anchor.x, anchor.y);
+  s.position.set(obj.x, obj.y);
+  s.scale.set(obj.flipX ? -obj.scale : obj.scale, obj.scale);
+  s.angle = obj.rotation;
+  return s;
+}
+
+function bareSprite(key: string, x: number, y: number, opts: Partial<{ anchorX: number; anchorY: number; scale: number }> = {}) {
   const s = new Sprite(getTexture(key));
   s.anchor.set(opts.anchorX ?? 0, opts.anchorY ?? 0);
   s.position.set(x, y);
@@ -36,118 +46,105 @@ function sprite(key: string, x: number, y: number, opts: Partial<{ anchorX: numb
   return s;
 }
 
+/** The wallpaper/wainscoting backdrop isn't a RoomObject either — like the photo wall, it's
+ * always-present infrastructure RoomCanvas.tsx mounts once, directly, so it never disappears
+ * while buildScene's legacy scene is torn down for edit mode. */
+export function mountBackground(world: Container) {
+  world.addChild(bareSprite('background', 0, 0));
+}
+
 export function buildScene(app: Application, world: Container, drag: DragState, cb: SceneCallbacks) {
   const cleanups: Array<() => void> = [];
-  const hidden = (kind: string) => cb.hiddenKinds.has(kind);
 
-  world.addChild(sprite('background', 0, 0));
-
-  // --- rug on the floor, centered under the table ---
-  if (!hidden('rug')) {
-    world.addChild(sprite('rug', ROOM_WIDTH / 2, ROOM_HEIGHT - 4, { anchorX: 0.5, anchorY: 1 }));
+  // Every interaction's own cleanup function (attachCake, attachFrame, ...) only detaches its
+  // listeners/transient overlays — that was safe when buildScene ran exactly once for the whole
+  // component's lifetime (the sprites died with the Pixi app on unmount either way), but this
+  // scene is now torn down and rebuilt every time edit mode toggles (see RoomCanvas.tsx), so a
+  // node that's never explicitly destroyed here would linger in `world` as an orphaned duplicate
+  // underneath the next rebuild. `mount` is the one place every top-level node this function adds
+  // goes through, so `destroy()` below can reliably remove all of them, not just their listeners.
+  function mount<T extends Container>(node: T): T {
+    world.addChild(node);
+    cleanups.push(() => {
+      if (!node.destroyed) node.destroy({ children: true });
+    });
+    return node;
   }
 
-  // --- left wall zone: frames + camera/tripod ---
-  if (!hidden('frame-mountain')) {
-    const frameMountain = sprite('frameMountain', 160, 120);
-    world.addChild(frameMountain);
-    cleanups.push(attachFrame(frameMountain, drag, () => cb.onEnlargeFrame('mountain')));
+  const byKind = new Map<string, RoomObjectData[]>();
+  for (const obj of cb.objects) {
+    if (obj.hidden) continue;
+    const list = byKind.get(obj.kind);
+    if (list) list.push(obj);
+    else byKind.set(obj.kind, [obj]);
   }
-  if (!hidden('frame-tulip')) {
-    const frameTulip = sprite('frameTulip', 320, 150);
-    world.addChild(frameTulip);
-    cleanups.push(attachFrame(frameTulip, drag, () => cb.onEnlargeFrame('tulip')));
+  const rowsFor = (kind: string) => byKind.get(kind) ?? [];
+
+  for (const obj of rowsFor('rug')) mount(spriteFor(obj));
+
+  for (const obj of rowsFor('frame-mountain')) {
+    const s = mount(spriteFor(obj));
+    cleanups.push(attachFrame(s, drag, () => cb.onEnlargeFrame('mountain')));
   }
-
-  if (!hidden('camera')) {
-    const camera = sprite('camera', 470, 300, { anchorX: 0.5, anchorY: 0 });
-    world.addChild(camera);
-    cleanups.push(attachCameraTrigger(camera, drag, cb.onOpenPhotobooth));
-  }
-
-  // photo wall: prints accumulate beside the booth, on the open wall between the camera and the
-  // window (see DECISIONS.md for the grid layout choice) — not a catalog item, always present
-  const photoWall = new PhotoWall(world, 610, 90, cb.onTapPrint);
-  cleanups.push(() => photoWall.destroy());
-
-  // --- center zone: window, curtains, banner, table setting ---
-  const windowX = WINDOW_X;
-  if (!hidden('window')) world.addChild(sprite('window', windowX, 60));
-  const winTex = getTexture('window');
-  if (!hidden('curtain-left')) world.addChild(sprite('curtainLeft', windowX - 78, 40));
-  if (!hidden('curtain-right')) world.addChild(sprite('curtainRight', windowX + winTex.width - 10, 40));
-
-  if (!hidden('banner')) {
-    world.addChild(sprite('banner', windowX + winTex.width / 2, 8, { anchorX: 0.5, anchorY: 0 }));
+  for (const obj of rowsFor('frame-tulip')) {
+    const s = mount(spriteFor(obj));
+    cleanups.push(attachFrame(s, drag, () => cb.onEnlargeFrame('tulip')));
   }
 
-  if (!hidden('garland')) {
-    const garlandTex = getTexture('garland');
-    for (let gx = -40; gx < ROOM_WIDTH; gx += garlandTex.width - 4) {
-      world.addChild(sprite('garland', gx, 0));
-    }
+  for (const obj of rowsFor('camera')) {
+    const s = mount(spriteFor(obj));
+    cleanups.push(attachCameraTrigger(s, drag, cb.onOpenPhotobooth));
   }
 
-  if (!hidden('lantern')) {
-    const lantern = sprite('lantern', windowX + winTex.width / 2, 0, { anchorX: 0.5, anchorY: 0 });
-    const glow = sprite('glow', lantern.x, 90, { anchorX: 0.5, anchorY: 0.5 });
+  for (const obj of rowsFor('window')) mount(spriteFor(obj));
+  for (const obj of rowsFor('curtain-left')) mount(spriteFor(obj));
+  for (const obj of rowsFor('curtain-right')) mount(spriteFor(obj));
+  for (const obj of rowsFor('banner')) mount(spriteFor(obj));
+  for (const obj of rowsFor('garland')) mount(spriteFor(obj));
+
+  for (const obj of rowsFor('lantern')) {
+    const lanternSprite = spriteFor(obj);
+    // The glow is a purely decorative companion, not its own RoomObject — it always follows
+    // whichever lantern row it's paired with, at the same offset the original hardcoded scene used.
+    const glow = bareSprite('glow', lanternSprite.x, obj.y + 90, { anchorX: 0.5, anchorY: 0.5 });
     glow.alpha = 0.6;
     glow.blendMode = 'add';
-    world.addChild(glow, lantern);
+    mount(glow);
+    mount(lanternSprite);
   }
 
-  // hanging stars scattered along the ceiling
-  if (!hidden('star')) {
-    const starPositions = [560, 760, 1320, 1520, 1780, 2020];
-    for (let i = 0; i < starPositions.length; i++) {
-      const s = sprite('star', starPositions[i], 0, { anchorX: 0.5, anchorY: 0 });
-      world.addChild(s);
-      cleanups.push(attachStar(s, world, drag, app.ticker, i, cb.reducedMotion));
-    }
-  }
+  rowsFor('star').forEach((obj, i) => {
+    const s = mount(spriteFor(obj));
+    cleanups.push(attachStar(s, world, drag, app.ticker, i, cb.reducedMotion));
+  });
 
-  // table + setting
-  const tableTex = getTexture('table');
-  const tableX = TABLE_X;
-  const tableY = TABLE_Y;
-  if (!hidden('table')) world.addChild(sprite('table', tableX, tableY));
+  for (const obj of rowsFor('table')) mount(spriteFor(obj));
+  for (const obj of rowsFor('chair')) mount(spriteFor(obj));
 
-  if (!hidden('chair')) {
-    world.addChild(sprite('chair', tableX - 60, tableY - 20));
-    world.addChild(sprite('chair', tableX + tableTex.width - 30, tableY - 20));
-  }
-
-  if (!hidden('cake')) {
+  for (const obj of rowsFor('cake')) {
     const cakeState = { lit: true };
-    const cake = sprite('cakeLit', tableX + tableTex.width / 2, tableY + 6, { anchorX: 0.5, anchorY: 1 });
-    world.addChild(cake);
-    cleanups.push(attachCake(cake, drag, app.ticker, cakeState, cb.onCakeToggle));
+    const s = mount(spriteFor(obj, 'cakeLit'));
+    cleanups.push(attachCake(s, drag, app.ticker, cakeState, cb.onCakeToggle));
   }
 
-  if (!hidden('cupcake-stand')) world.addChild(sprite('cupcakeStand', tableX + 20, tableY - 24));
-  if (!hidden('vase')) world.addChild(sprite('vase', tableX + tableTex.width - 70, tableY - 30));
-  if (!hidden('snack-bowl')) world.addChild(sprite('snackBowl', tableX + tableTex.width - 130, tableY - 12));
-  if (!hidden('cups')) world.addChild(sprite('cups', tableX + 40, tableY - 8));
+  for (const obj of rowsFor('cupcake-stand')) mount(spriteFor(obj));
+  for (const obj of rowsFor('vase')) mount(spriteFor(obj));
+  for (const obj of rowsFor('snack-bowl')) mount(spriteFor(obj));
+  for (const obj of rowsFor('cups')) mount(spriteFor(obj));
 
-  // --- right wall zone: shelf + balloons ---
-  if (!hidden('shelf')) world.addChild(sprite('shelf', 1780, 130));
+  for (const obj of rowsFor('shelf')) mount(spriteFor(obj));
 
-  if (!hidden('balloon')) {
-    const balloonColors = ['purple', 'red', 'green', 'yellow', 'orange', 'pink'];
-    const balloonBaseX = [1980, 2050, 2120, 2190, 2260, 2330];
-    const balloonBaseY = [180, 235, 190, 160, 225, 195];
-    for (let i = 0; i < balloonColors.length; i++) {
-      const b = sprite(`balloon_${balloonColors[i]}`, balloonBaseX[i], balloonBaseY[i], { anchorX: 0.5, anchorY: 0 });
-      world.addChild(b);
-      cleanups.push(attachBalloon(b, world, drag, app.ticker, i, cb.reducedMotion));
-    }
-  }
+  rowsFor('balloon').forEach((obj, i) => {
+    const config = parseObjectConfig(obj.configJson);
+    const color = typeof config.color === 'string' ? config.color : 'purple';
+    const s = mount(spriteFor(obj, `balloon_${color}`));
+    cleanups.push(attachBalloon(s, world, drag, app.ticker, i, cb.reducedMotion));
+  });
 
-  // --- cat wandering the floor ---
-  if (!hidden('cat')) {
-    const cat = new CatController(world, app.ticker, drag, cb.reducedMotion);
+  for (const obj of rowsFor('cat')) {
+    const cat = new CatController(world, app.ticker, drag, cb.reducedMotion, { x: obj.x, y: obj.y, scale: obj.scale });
     cleanups.push(() => cat.destroy());
   }
 
-  return { destroy: () => cleanups.forEach((fn) => fn()), photoWall };
+  return { destroy: () => cleanups.forEach((fn) => fn()) };
 }

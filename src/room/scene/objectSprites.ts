@@ -13,6 +13,10 @@ const MANIFEST_KEY_OVERRIDE: Record<string, string> = {
   'cupcake-stand': 'cupcakeStand',
   'snack-bowl': 'snackBowl',
   cake: 'cakeLit', // Phase 1 baseline; Phase 2 renders per the object's own cake config instead
+  // Edit mode's static representation (EditableObjectsLayer) always shows the idle pose — the
+  // interactive view-mode render (buildScene.ts, via CatController) manages its own live
+  // walk/sit/hop texture switching independently and never goes through this lookup.
+  cat: 'cat_idle',
 };
 
 export function manifestKeyFor(kind: string): string {
@@ -27,6 +31,16 @@ const ANCHOR_OVERRIDE: Record<string, { x: number; y: number }> = {
   banner: { x: 0.5, y: 0 },
   lantern: { x: 0.5, y: 0 },
   'paper-lantern-decor': { x: 0.5, y: 0 },
+  // These five legacy kinds all draw from their own top-left origin (matching the original
+  // hardcoded buildScene.ts, which never passed an anchor option for them) — their own zone's
+  // default anchor (see ZONE_DEFAULT_ANCHOR below) would otherwise reposition them incorrectly.
+  garland: { x: 0, y: 0 },
+  table: { x: 0, y: 0 },
+  chair: { x: 0, y: 0 },
+  'cupcake-stand': { x: 0, y: 0 },
+  vase: { x: 0, y: 0 },
+  'snack-bowl': { x: 0, y: 0 },
+  cups: { x: 0, y: 0 },
 };
 
 const ZONE_DEFAULT_ANCHOR: Record<string, { x: number; y: number }> = {
@@ -48,6 +62,12 @@ export function dynamicTextureFor(kind: string, config: Record<string, unknown>)
   if (kind === 'neon-sign' && typeof config.text === 'string' && config.text.trim()) {
     const cacheKey = `neon-sign:${config.text}`;
     return getOrBuildCached(cacheKey, () => drawNeonSignText(config.text as string));
+  }
+  // A balloon's color is per-instance data, not a fixed manifest entry (manifestKeyFor can't
+  // express it — there's one shared 'balloon' catalog key but six colored textures).
+  if (kind === 'balloon') {
+    const color = typeof config.color === 'string' ? config.color : 'purple';
+    return getTexture(`balloon_${color}`);
   }
   return null;
 }
