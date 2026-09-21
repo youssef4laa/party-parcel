@@ -27,6 +27,11 @@ test.describe('photobooth', () => {
   test('take a photo on the celebrate link, see it on the wall, then delete it', async ({ page }) => {
     test.setTimeout(60_000);
     await page.goto(`/r/${celebrate}`);
+    // The canvas's role="application" div renders before Pixi's async init (fonts, WebGL, the
+    // camera prop's sprite) finishes — waiting for the pan-hint text first, same as phone.spec.ts,
+    // guarantees the click below actually has something to land on (see DECISIONS.md's Room
+    // Editor Phase 1c entry, which root-caused an identical race in goodies-e2e.spec.ts).
+    await expect(page.getByText(/Drag, scroll, or use/)).toBeVisible();
 
     const room = page.getByRole('application', { name: 'Party room' });
     const box = await room.boundingBox();

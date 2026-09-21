@@ -130,6 +130,16 @@ test.describe.serial('all ten goodie types, sealed and unwrapped', () => {
     expect(unlock.ok()).toBeTruthy();
 
     await page.goto(`/r/${celebrate}`);
+    // Room Editor Phase 1c root-cause fix: the room canvas's `<div role="application">` renders
+    // synchronously, well before Pixi has finished its async init (font loading, WebGL context,
+    // fetching+placing box sprites) — a raw `.click({position})` right after `goto` has no actual
+    // wait for that to finish, so under real system load it can land on an empty div and silently
+    // do nothing (no error, box just never opens). Waiting for the pan-hint text first (same
+    // pattern as phone.spec.ts) guarantees the scene, and therefore the box sprite, actually
+    // exists before the click fires. See DECISIONS.md for the isolated repro proving this (not
+    // shared test-DB/upload state, not test ordering, not date-relative fixtures) and confirming
+    // the fix.
+    await expect(page.getByText(/Drag, scroll, or use/)).toBeVisible();
     // The box settles at its snapped floor position (anchored bottom-center) — click near that
     // anchor point, not the spot originally clicked during placement (see helpers.ts comment).
     await page.getByRole('application', { name: 'Party room' }).click({ position: { x: 400, y: 560 } });
@@ -154,6 +164,9 @@ test.describe.serial('all ten goodie types, sealed and unwrapped', () => {
 
   test('coupon redemption survives a reload', async ({ page }) => {
     await page.goto(`/r/${celebrate}`);
+    // See the identical comment on the previous test — wait for the scene to actually be ready
+    // before clicking the canvas, or the click can race Pixi's async init under system load.
+    await expect(page.getByText(/Drag, scroll, or use/)).toBeVisible();
     await page.getByRole('application', { name: 'Party room' }).click({ position: { x: 400, y: 560 } });
     await page.getByRole('button', { name: 'Tap to unwrap!' }).click({ timeout: 10_000 });
     await page.getByRole('button', { name: 'Continue' }).click({ timeout: 10_000 });

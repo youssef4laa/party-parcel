@@ -59,12 +59,16 @@ test('an old room and its boxes survive restoring a pre-Room-Editor backup and m
     runPrisma('migrate deploy', databaseUrl);
 
     // 2. Seed exactly the shape of data a real pre-Room-Editor room+box had (columns match
-    // migrations/20260919235239_init/migration.sql).
+    // migrations/20260919235239_init/migration.sql). eventAt is relative to "now" (a fixed literal
+    // date would just be further in the past every time this suite runs, and while nothing here
+    // actually reads eventAt, a stray absolute date is exactly the kind of fixture that quietly
+    // rots — see DECISIONS.md's Room Editor Phase 1c entry).
+    const legacyEventAt = new Date(Date.now() - 60 * 24 * 60 * 60_000).toISOString(); // 60 days ago
     sqlite(
       dbPath,
       `
       INSERT INTO "Room" (id, title, celebrantName, age, eventAt, timezone, hostEmail, adminTokenHash, contributeTokenHash, celebrateTokenHash)
-      VALUES ('room-legacy-1', 'Legacy Bash', 'Pat', 40, '2026-01-01T00:00:00.000Z', 'UTC', 'host@example.com', 'admin-hash-1', 'contribute-hash-1', 'celebrate-hash-1');
+      VALUES ('room-legacy-1', 'Legacy Bash', 'Pat', 40, '${legacyEventAt}', 'UTC', 'host@example.com', 'admin-hash-1', 'contribute-hash-1', 'celebrate-hash-1');
 
       INSERT INTO "Box" (id, roomId, fromName, designJson, posX, posY, deleteTokenHash)
       VALUES ('box-legacy-1', 'room-legacy-1', 'Old Friend', '{"shape":"cube"}', 500, 600, 'delete-hash-1');
