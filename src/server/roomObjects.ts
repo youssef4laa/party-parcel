@@ -44,11 +44,11 @@ export type UpdateObjectInput = z.infer<typeof UpdateObjectSchema>;
  * docs/ROOM_EDITOR.md 1a). Wrapped in a transaction so two near-simultaneous first loads can't
  * double-seed — SQLite serializes writers, so this is enough for this app's traffic level.
  */
-export async function resolveRoomObjects(roomId: string) {
+export async function resolveRoomObjects(roomId: string, age?: number | null) {
   return prisma.$transaction(async (tx) => {
     const count = await tx.roomObject.count({ where: { roomId } });
     if (count === 0) {
-      const seed = defaultLayout();
+      const seed = defaultLayout(age);
       await tx.roomObject.createMany({
         data: seed.map((item) => ({
           roomId,

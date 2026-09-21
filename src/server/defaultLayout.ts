@@ -1,4 +1,5 @@
 import type { RoomZone } from '@/room/objectCatalog';
+import { DEFAULT_CAKE_CONFIG, defaultCandleCount, type CakeConfig } from '@/room/cakeConfig';
 
 /** One row of the seeded default layout, minus the fields Prisma fills in itself. */
 export type DefaultLayoutItem = {
@@ -25,8 +26,13 @@ const GARLAND_TEX_W = 60 * 4;
  * (or an existing room with zero RoomObject rows — see resolveRoomObjects()) gets exactly this
  * set, so the default look is unchanged; every value here is now just a starting point the host
  * can move, resize, hide, or delete.
+ *
+ * `age` (the room's own celebrant age, when known) sets the seeded cake's default candle count —
+ * "count matching the age (up to 10 small candles)" per docs/ROOM_EDITOR.md Phase 2. Callers with
+ * no room to read an age from (the demo sandbox, a fresh reset with age unavailable) can omit it
+ * and get DEFAULT_CAKE_CONFIG's own fallback count instead.
  */
-export function defaultLayout(): DefaultLayoutItem[] {
+export function defaultLayout(age?: number | null): DefaultLayoutItem[] {
   const items: DefaultLayoutItem[] = [];
 
   items.push({ kind: 'rug', x: ROOM_WIDTH / 2, y: ROOM_HEIGHT - 4, z: 0, zone: 'floor' });
@@ -62,20 +68,14 @@ export function defaultLayout(): DefaultLayoutItem[] {
   items.push({ kind: 'chair', x: TABLE_X - 60, y: TABLE_Y - 20, z: 0, zone: 'floor' });
   items.push({ kind: 'chair', x: TABLE_X + TABLE_TEX_W - 30, y: TABLE_Y - 20, z: 0, zone: 'floor' });
 
+  const cakeConfig: CakeConfig = { ...DEFAULT_CAKE_CONFIG, candleCount: defaultCandleCount(age) };
   items.push({
     kind: 'cake',
     x: TABLE_X + TABLE_TEX_W / 2,
     y: TABLE_Y + 6,
     z: 10,
     zone: 'tabletop',
-    configJson: JSON.stringify({
-      style: 'tiered-classic',
-      frostingColor: '#fff8f0',
-      spongeColor: '#c98a4b',
-      topper: 'none',
-      text: '',
-      candles: 'small',
-    }),
+    configJson: JSON.stringify(cakeConfig),
   });
   items.push({ kind: 'cupcake-stand', x: TABLE_X + 20, y: TABLE_Y - 24, z: 20, zone: 'tabletop' });
   items.push({ kind: 'vase', x: TABLE_X + TABLE_TEX_W - 70, y: TABLE_Y - 30, z: 30, zone: 'tabletop' });

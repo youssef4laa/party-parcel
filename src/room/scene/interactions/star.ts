@@ -24,8 +24,17 @@ export function attachStar(
   ticker.add(tickerFn);
 
   let sparkle: Sprite | null = null;
+  let sparkleTickerFn: ((ticker2: Ticker) => void) | null = null;
   const onTap = () => {
     if (drag.wasDragging) return;
+    // A re-click before the previous sparkle's own ~0.5s fade finished must stop ITS ticker
+    // callback too, not just destroy the sprite — otherwise that callback runs again next frame
+    // against an already-destroyed Sprite and throws (the exact bug this project's cake blow-out
+    // had — see DECISIONS.md's Room Editor Phase 2 entry for the full story of finding it there).
+    if (sparkleTickerFn) {
+      ticker.remove(sparkleTickerFn);
+      sparkleTickerFn = null;
+    }
     sparkle?.destroy();
     sparkle = new Sprite(getTexture('sparkle'));
     sparkle.anchor.set(0.5);
@@ -41,10 +50,12 @@ export function attachStar(
       localSparkle.rotation += ticker2.deltaMS * 0.005;
       if (age > 0.5) {
         ticker.remove(sparkleFn);
+        sparkleTickerFn = null;
         localSparkle.destroy();
         if (sparkle === localSparkle) sparkle = null;
       }
     };
+    sparkleTickerFn = sparkleFn;
     ticker.add(sparkleFn);
   };
   s.on('pointertap', onTap);
@@ -52,6 +63,7 @@ export function attachStar(
   return () => {
     ticker.remove(tickerFn);
     s.off('pointertap', onTap);
+    if (sparkleTickerFn) ticker.remove(sparkleTickerFn);
     sparkle?.destroy();
   };
 }

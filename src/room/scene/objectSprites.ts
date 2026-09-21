@@ -1,5 +1,7 @@
 import { getTexture } from '../manifest';
 import { drawNeonSignText } from '../sprites/decor';
+import { drawCake } from '../sprites/cake';
+import { parseCakeConfig } from '../cakeConfig';
 import { Texture } from 'pixi.js';
 
 /** Catalog `kind` -> manifest registry key, for kinds whose sprite key differs from its catalog
@@ -12,7 +14,10 @@ const MANIFEST_KEY_OVERRIDE: Record<string, string> = {
   'frame-tulip': 'frameTulip',
   'cupcake-stand': 'cupcakeStand',
   'snack-bowl': 'snackBowl',
-  cake: 'cakeLit', // Phase 1 baseline; Phase 2 renders per the object's own cake config instead
+  // Defensive fallback only — dynamicTextureFor/cakeTextureFor below always handles 'cake' kind
+  // for real placed objects (docs/ROOM_EDITOR.md Phase 2). This key is only ever reached if a
+  // future call site looks up a cake texture through manifestKeyFor directly instead.
+  cake: 'cakeLit',
   // Edit mode's static representation (EditableObjectsLayer) always shows the idle pose — the
   // interactive view-mode render (buildScene.ts, via CatController) manages its own live
   // walk/sit/hop texture switching independently and never goes through this lookup.
@@ -69,6 +74,12 @@ export function dynamicTextureFor(kind: string, config: Record<string, unknown>)
     const color = typeof config.color === 'string' ? config.color : 'purple';
     return getTexture(`balloon_${color}`);
   }
+  // A cake's entire look (style/colors/topper/text/candles) is per-instance data — always shown
+  // lit here, since edit mode's static representation never toggles (see cakeTextureFor for the
+  // lit/unlit variant view mode's blow-out interaction actually swaps between).
+  if (kind === 'cake') {
+    return cakeTextureFor(parseCakeConfig(config), true);
+  }
   return null;
 }
 
@@ -80,6 +91,15 @@ function getOrBuildCached(key: string, draw: () => HTMLCanvasElement): Texture {
   tex.source.scaleMode = 'nearest';
   dynamicCache.set(key, tex);
   return tex;
+}
+
+/** The cake's own lit/unlit texture pair for a given config — used by both edit mode's static
+ * preview (always `lit: true`, via dynamicTextureFor above) and view mode's blow-out interaction
+ * (buildScene.ts/interactions/cake.ts), which needs to swap between both variants of the SAME
+ * config on every tap. Cached per config+lit combination so repeated taps don't redraw the canvas. */
+export function cakeTextureFor(config: ReturnType<typeof parseCakeConfig>, lit: boolean): Texture {
+  const key = `cake:${JSON.stringify(config)}:${lit}`;
+  return getOrBuildCached(key, () => drawCake(lit, config));
 }
 
 export { getTexture };

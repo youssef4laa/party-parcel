@@ -1,7 +1,8 @@
-import { Application, Container, Sprite } from 'pixi.js';
+import { Application, Container, Sprite, Texture } from 'pixi.js';
 import { getTexture } from '../manifest';
-import { manifestKeyFor, anchorFor } from './objectSprites';
+import { manifestKeyFor, anchorFor, cakeTextureFor } from './objectSprites';
 import { parseObjectConfig } from './objectConfig';
+import { parseCakeConfig } from '../cakeConfig';
 import type { DragState } from './camera';
 import { CatController } from './interactions/cat';
 import { attachBalloon } from './interactions/balloon';
@@ -28,8 +29,9 @@ export type SceneCallbacks = {
   objects: RoomObjectData[];
 };
 
-function spriteFor(obj: RoomObjectData, textureKey?: string) {
-  const s = new Sprite(getTexture(textureKey ?? manifestKeyFor(obj.kind)));
+function spriteFor(obj: RoomObjectData, texture?: string | Texture) {
+  const tex = texture === undefined || typeof texture === 'string' ? getTexture(texture ?? manifestKeyFor(obj.kind)) : texture;
+  const s = new Sprite(tex);
   const anchor = anchorFor(obj.kind, obj.zone);
   s.anchor.set(anchor.x, anchor.y);
   s.position.set(obj.x, obj.y);
@@ -122,9 +124,10 @@ export function buildScene(app: Application, world: Container, drag: DragState, 
   for (const obj of rowsFor('chair')) mount(spriteFor(obj));
 
   for (const obj of rowsFor('cake')) {
+    const cakeConfig = parseCakeConfig(parseObjectConfig(obj.configJson));
     const cakeState = { lit: true };
-    const s = mount(spriteFor(obj, 'cakeLit'));
-    cleanups.push(attachCake(s, drag, app.ticker, cakeState, cb.onCakeToggle));
+    const s = mount(spriteFor(obj, cakeTextureFor(cakeConfig, true)));
+    cleanups.push(attachCake(s, drag, app.ticker, cakeState, (lit) => cakeTextureFor(cakeConfig, lit), cb.onCakeToggle));
   }
 
   for (const obj of rowsFor('cupcake-stand')) mount(spriteFor(obj));

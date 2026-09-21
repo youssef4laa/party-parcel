@@ -248,7 +248,7 @@ export default function RoomCanvas({
       // already reflects real positions/hidden state. The "/" sandbox and the static export have
       // no roomToken (no real RoomObject rows to fetch at all — see demoObjects.ts) and fall back
       // to the same default layout a brand-new real room seeds.
-      let initialObjects: RoomObjectApi[] = roomToken ? [] : demoLayoutObjects();
+      let initialObjects: RoomObjectApi[] = roomToken ? [] : demoLayoutObjects(age);
       if (roomToken) {
         try {
           initialObjects = await fetchRoomObjects(roomToken);
@@ -346,7 +346,7 @@ export default function RoomCanvas({
         app.destroy(true, { children: true });
       }
     };
-  }, [bannerText, placeBoxSprite, source, handleRef, roomToken, handleObjectMoved]);
+  }, [bannerText, placeBoxSprite, source, handleRef, roomToken, handleObjectMoved, age]);
 
   // Rebuilds the interactive/animated legacy scene whenever edit mode toggles off (or, on the
   // very first render, is skipped — the main init effect above already built it once). Turning
@@ -587,6 +587,7 @@ export default function RoomCanvas({
           isHost={isHost}
           permissions={permissions}
           onSavePermissions={handleSavePermissions}
+          age={age}
         />
       )}
 

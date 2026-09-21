@@ -61,6 +61,7 @@ type NodeState = {
 export class EditableObjectsLayer {
   private container = new Container();
   private nodes = new Map<string, Container>();
+  private sprites = new Map<string, Sprite>();
   private selectionBoxes = new Map<string, Graphics>();
   private nodeStates = new Map<string, NodeState>();
   private ambientTickers = new Map<string, (ticker: Ticker) => void>();
@@ -97,6 +98,19 @@ export class EditableObjectsLayer {
 
       const state = this.nodeStates.get(obj.id);
       if (state) {
+        // A kind whose look depends on its own configJson (cake, banner, neon-sign, balloon — see
+        // dynamicTextureFor) needs its sprite's texture rebuilt when THAT changes — buildNode only
+        // ever runs once per object id, so without this, editing a placed cake's style/text/colors
+        // (docs/ROOM_EDITOR.md Phase 2's Cake editor) would silently do nothing to the actual
+        // in-room sprite until edit mode was toggled off and back on. Position/scale/rotation
+        // already refresh every call via applyTransform below; this is the one thing that didn't.
+        if (state.obj.configJson !== obj.configJson) {
+          const dynamicTex = dynamicTextureFor(obj.kind, parseObjectConfig(obj.configJson));
+          if (dynamicTex) {
+            const sprite = this.sprites.get(obj.id);
+            if (sprite) sprite.texture = dynamicTex;
+          }
+        }
         // Update the snapshot the persistent handlers read from — never touch listeners here,
         // and never clobber x/y while a drag on THIS node is actually in progress (a reactive
         // setObjects can land mid-gesture, e.g. right after the drag's own pointerdown selects
@@ -112,6 +126,7 @@ export class EditableObjectsLayer {
       if (!seen.has(id)) {
         node.destroy({ children: true });
         this.nodes.delete(id);
+        this.sprites.delete(id);
         this.selectionBoxes.delete(id);
         this.nodeStates.delete(id);
         const ambientFn = this.ambientTickers.get(id);
@@ -132,6 +147,7 @@ export class EditableObjectsLayer {
     const anchor = anchorFor(obj.kind, obj.zone);
     sprite.anchor.set(anchor.x, anchor.y);
     node.addChild(sprite);
+    this.sprites.set(obj.id, sprite);
 
     const selectionBox = new Graphics();
     selectionBox.visible = false;
@@ -231,6 +247,7 @@ export class EditableObjectsLayer {
     this.ambientTickers.clear();
     this.container.destroy({ children: true });
     this.nodes.clear();
+    this.sprites.clear();
     this.selectionBoxes.clear();
     this.nodeStates.clear();
   }

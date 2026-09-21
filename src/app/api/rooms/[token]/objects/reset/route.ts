@@ -18,7 +18,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     return jsonError(429, 'Too many resets — please slow down.');
   }
 
-  const seed = defaultLayout();
+  const seed = defaultLayout(resolved.room.age);
   await prisma.$transaction([
     prisma.roomObject.deleteMany({ where: { roomId: resolved.room.id } }),
     prisma.roomObject.createMany({

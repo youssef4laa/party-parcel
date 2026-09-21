@@ -21,7 +21,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
   const resolved = await resolveRoomByToken(token);
   if (!resolved) return jsonError(404, "This link doesn't exist (or was typed wrong).");
 
-  const objects = await resolveRoomObjects(resolved.room.id);
+  const objects = await resolveRoomObjects(resolved.room.id, resolved.room.age);
   return NextResponse.json({ objects });
 }
 

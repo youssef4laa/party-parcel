@@ -10,9 +10,9 @@ import type { RoomObjectApi } from '../api';
  * plain function, no Prisma/server-only imports, safe to reuse client-side here) instead of
  * duplicating that layout data a second time.
  */
-export function demoLayoutObjects(): RoomObjectApi[] {
+export function demoLayoutObjects(age?: number | null): RoomObjectApi[] {
   const now = new Date(0).toISOString();
-  return defaultLayout().map((item, i) => ({
+  return defaultLayout(age).map((item, i) => ({
     id: `demo-${item.kind}-${i}`,
     kind: item.kind,
     x: item.x,

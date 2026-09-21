@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { catalogEntriesFor, type CatalogCategory } from '@/room/objectCatalog';
 import type { RoomObjectApi, RoomObjectPatch, RoomPermissions } from '@/room/api';
 import { LIMITS } from '@/config/limits';
+import CakeEditor from './CakeEditor';
 
 type Tab = 'items' | 'draw' | 'layers' | 'permissions';
 
@@ -32,6 +33,7 @@ export default function EditPanel({
   isHost,
   permissions,
   onSavePermissions,
+  age,
 }: {
   capabilities: string[];
   objects: RoomObjectApi[];
@@ -45,6 +47,9 @@ export default function EditPanel({
   isHost: boolean;
   permissions: RoomPermissions | null;
   onSavePermissions: (p: RoomPermissions) => void;
+  /** The celebrant's age, if known — only used to offer a "match age" shortcut in the Cake
+   * section's candle-count field (docs/ROOM_EDITOR.md Phase 2). */
+  age?: number;
 }) {
   const [tab, setTab] = useState<Tab>('items');
   const [category, setCategory] = useState<CatalogCategory | undefined>(undefined);
@@ -89,6 +94,7 @@ export default function EditPanel({
                 onDeselect={() => onSelect(null)}
               />
             )}
+            {selected?.kind === 'cake' && <CakeEditor key={selected.id} item={selected} onUpdate={onUpdateSelected} age={age} />}
 
             <div>
               <input
