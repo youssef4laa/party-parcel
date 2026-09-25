@@ -49,6 +49,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
 
   const sessionHash = sessionHashFrom(req);
 
+  // A custom object must point at an item in THIS room's library — never another room's, and never
+  // a made-up id (the FK alone would only catch the latter, and by throwing a 500).
+  if (parsed.data.assetId) {
+    const item = await prisma.customItem.findFirst({ where: { id: parsed.data.assetId, roomId: room.id } });
+    if (!item) return jsonError(400, 'That item is not in this room\'s library.');
+  }
+
   // MAX_OBJECTS_PER_ROOM, room-wide
   const total = await prisma.roomObject.count({ where: { roomId: room.id } });
   if (total >= LIMITS.maxObjectsPerRoom) {
@@ -76,6 +83,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
       rotation: parsed.data.rotation ?? 0,
       zone: parsed.data.zone,
       configJson: parsed.data.configJson ?? '{}',
+      assetId: parsed.data.assetId ?? null,
       createdByRole: role,
       createdBySessionHash: role === 'admin' ? null : (sessionHash ?? null),
     },

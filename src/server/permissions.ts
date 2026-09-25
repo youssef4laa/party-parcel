@@ -88,6 +88,37 @@ export function canMutateObjects(input: {
   return false;
 }
 
+export type CustomItemAction = 'create' | 'update' | 'delete';
+export type CustomItemSource = 'import' | 'drawing';
+
+/**
+ * Who may add to, edit, or remove from a room's "My items" library (docs/ROOM_EDITOR.md Phase 3:
+ * "Custom items obey canImport/canDraw. The owner or host can delete an item"). Separate from
+ * `canMutateObjects` on purpose: adding art to the library is not the same act as placing it in
+ * the room (that still goes through the object routes and `canDecorate`). Like the object rule,
+ * this is the real boundary — every custom-item route calls it, whatever the UI shows.
+ */
+export function canManageCustomItems(input: {
+  role: RoomRole;
+  permissions: RoomPermissions;
+  action: CustomItemAction;
+  /** "import" (PNG/WebP file) or "drawing" (made in the pixel editor) — gates canImport vs canDraw. */
+  source: CustomItemSource;
+  /** Only meaningful for update/delete of an existing item. */
+  isOwner?: boolean;
+}): boolean {
+  const { role, permissions, action, source, isOwner } = input;
+  if (role === 'admin') return true;
+  if (permissions.freezeLayout) return false;
+  if (role !== 'contribute') return false; // celebrant never adds art, even with canRearrange
+  const allowedToMake = source === 'drawing' ? permissions.contributors.canDraw : permissions.contributors.canImport;
+  if (action === 'create') return allowedToMake;
+  if (!isOwner) return false;
+  // Deleting your own item stays allowed even if the host later switched importing off — taking
+  // back something you added is not "importing". Editing it is making art, so that still needs the flag.
+  return action === 'delete' ? true : allowedToMake;
+}
+
 /**
  * A display hint only — the room payload's `capabilities` list, used to decide whether to show
  * the pencil icon and which tools/tabs to offer. Never the actual authorization boundary: every

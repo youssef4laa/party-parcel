@@ -51,6 +51,11 @@ const catalog: CatalogEntry[] = [
   { key: 'snack-bowl', label: 'Snack bowl', category: 'furniture', defaultZone: 'tabletop', hiddenFromCatalog: true },
   { key: 'cups', label: 'Cups', category: 'furniture', defaultZone: 'tabletop', hiddenFromCatalog: true },
 
+  // --- Custom items (Phase 3): one catalog kind for every imported PNG / drawing. WHICH image it
+  // shows is the object's `assetId` (a CustomItem row), not its kind — so there's one entry here,
+  // not one per item. Placed from the "My items" library, never the built-in catalog browser.
+  { key: 'custom', label: 'Custom item', category: 'special', defaultZone: 'anywhere', hiddenFromCatalog: true },
+
   // --- Furniture (Phase 1c) ---
   { key: 'sofa', label: 'Sofa', category: 'furniture', defaultZone: 'floor' },
   { key: 'armchair', label: 'Armchair', category: 'furniture', defaultZone: 'floor' },

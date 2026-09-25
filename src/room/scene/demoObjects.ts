@@ -25,6 +25,7 @@ export function demoLayoutObjects(age?: number | null): RoomObjectApi[] {
     locked: false,
     hidden: false,
     configJson: item.configJson ?? '{}',
+    assetId: null,
     createdByRole: 'admin',
     createdBySessionHash: null,
     createdAt: now,

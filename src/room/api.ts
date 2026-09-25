@@ -212,6 +212,8 @@ export type RoomObjectApi = {
   locked: boolean;
   hidden: boolean;
   configJson: string;
+  /** Set only for kind "custom": the CustomItem (room library entry) this object renders. */
+  assetId: string | null;
   createdByRole: string;
   createdBySessionHash: string | null;
   createdAt: string;
@@ -243,6 +245,7 @@ export async function createRoomObject(
     flipX?: boolean;
     rotation?: number;
     configJson?: string;
+    assetId?: string;
   },
 ) {
   const res = await fetch(`/api/rooms/${token}/objects`, {
@@ -310,4 +313,72 @@ export async function updateRoomPermissions(token: string, permissions: RoomPerm
   });
   const data = await asJson<{ permissions: RoomPermissions }>(res);
   return data.permissions;
+}
+
+// --- Custom items: the room's "My items" library (docs/ROOM_EDITOR.md Phase 3) ---
+
+export type CustomItemApi = {
+  id: string;
+  name: string;
+  width: number;
+  height: number;
+  size: number;
+  source: 'import' | 'drawing';
+  createdByRole: string;
+  /** Display hint (this browser made it, or the caller is the host) — routes re-check for real. */
+  mine: boolean;
+  url: string;
+};
+
+export async function fetchCustomItems(token: string, sessionToken: string | undefined) {
+  const res = await fetch(`/api/rooms/${token}/custom-items`, { headers: sessionToken ? { 'X-Contributor-Session': sessionToken } : {} });
+  const data = await asJson<{ items: CustomItemApi[] }>(res);
+  return data.items;
+}
+
+function customItemQuery(opts: { source?: 'import' | 'drawing'; name?: string }) {
+  const q = new URLSearchParams();
+  if (opts.source) q.set('source', opts.source);
+  if (opts.name !== undefined) q.set('name', opts.name);
+  const s = q.toString();
+  return s ? `?${s}` : '';
+}
+
+export async function createCustomItem(
+  token: string,
+  sessionToken: string | undefined,
+  png: Blob,
+  opts: { source: 'import' | 'drawing'; name: string },
+) {
+  const res = await fetch(`/api/rooms/${token}/custom-items${customItemQuery(opts)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'image/png', ...(sessionToken ? { 'X-Contributor-Session': sessionToken } : {}) },
+    body: png,
+  });
+  const data = await asJson<{ item: CustomItemApi }>(res);
+  return data.item;
+}
+
+export async function replaceCustomItem(
+  token: string,
+  sessionToken: string | undefined,
+  itemId: string,
+  png: Blob,
+  opts: { source: 'import' | 'drawing'; name: string },
+) {
+  const res = await fetch(`/api/rooms/${token}/custom-items/${itemId}${customItemQuery(opts)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'image/png', ...(sessionToken ? { 'X-Contributor-Session': sessionToken } : {}) },
+    body: png,
+  });
+  const data = await asJson<{ item: CustomItemApi }>(res);
+  return data.item;
+}
+
+export async function deleteCustomItem(token: string, sessionToken: string | undefined, itemId: string) {
+  const res = await fetch(`/api/rooms/${token}/custom-items/${itemId}`, {
+    method: 'DELETE',
+    headers: sessionToken ? { 'X-Contributor-Session': sessionToken } : {},
+  });
+  return asJson<{ ok: true; removedObjects: number }>(res);
 }

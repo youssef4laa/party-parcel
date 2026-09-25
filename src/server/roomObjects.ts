@@ -16,6 +16,11 @@ export const CreateObjectSchema = z.object({
   rotation: z.union([z.literal(0), z.literal(90), z.literal(180), z.literal(270)]).optional(),
   zone: z.enum(ROOM_ZONES as [string, ...string[]]),
   configJson: z.string().max(4000).optional(),
+  /** Only for kind "custom": the CustomItem (room library entry) this object renders. Checked
+   * against the room in the create route — a schema can't know which items belong to which room. */
+  assetId: z.string().min(1).max(64).optional(),
+}).refine((v) => (v.kind === 'custom') === (v.assetId !== undefined), {
+  message: 'Custom items need an assetId, and only custom items can have one.',
 });
 export type CreateObjectInput = z.infer<typeof CreateObjectSchema>;
 

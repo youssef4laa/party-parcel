@@ -2,9 +2,11 @@
 
 import { useState } from 'react';
 import { catalogEntriesFor, type CatalogCategory } from '@/room/objectCatalog';
-import type { RoomObjectApi, RoomObjectPatch, RoomPermissions } from '@/room/api';
+import type { CustomItemApi, RoomObjectApi, RoomObjectPatch, RoomPermissions } from '@/room/api';
 import { LIMITS } from '@/config/limits';
 import CakeEditor from './CakeEditor';
+import DrawImportTab from './DrawImportTab';
+import MyItems from './MyItems';
 
 type Tab = 'items' | 'draw' | 'layers' | 'permissions';
 
@@ -34,6 +36,11 @@ export default function EditPanel({
   permissions,
   onSavePermissions,
   age,
+  customItems,
+  onCreateCustomItem,
+  onReplaceCustomItem,
+  onDeleteCustomItem,
+  onPlaceCustomItem,
 }: {
   capabilities: string[];
   objects: RoomObjectApi[];
@@ -50,6 +57,12 @@ export default function EditPanel({
   /** The celebrant's age, if known — only used to offer a "match age" shortcut in the Cake
    * section's candle-count field (docs/ROOM_EDITOR.md Phase 2). */
   age?: number;
+  /** The room's "My items" library (docs/ROOM_EDITOR.md Phase 3). */
+  customItems: CustomItemApi[];
+  onCreateCustomItem: (png: Blob, opts: { source: 'import' | 'drawing'; name: string }) => Promise<CustomItemApi>;
+  onReplaceCustomItem: (itemId: string, png: Blob, opts: { source: 'import' | 'drawing'; name: string }) => Promise<CustomItemApi>;
+  onDeleteCustomItem: (itemId: string) => Promise<void>;
+  onPlaceCustomItem: (item: CustomItemApi) => void;
 }) {
   const [tab, setTab] = useState<Tab>('items');
   const [category, setCategory] = useState<CatalogCategory | undefined>(undefined);
@@ -89,6 +102,7 @@ export default function EditPanel({
             {selected && (
               <SelectedItemToolbar
                 item={selected}
+                label={selected.kind === 'custom' ? customItems.find((i) => i.id === selected.assetId)?.name || 'Custom item' : selected.kind}
                 onUpdate={onUpdateSelected}
                 onDelete={onDeleteSelected}
                 onDeselect={() => onSelect(null)}
@@ -139,18 +153,25 @@ export default function EditPanel({
               ))}
               {entries.length === 0 && <li className="font-mono text-sm italic text-[#5e3620]/60">No items match.</li>}
             </ul>
+
+            {customItems.length > 0 && <MyItems items={customItems} objects={objects} onPlace={onPlaceCustomItem} />}
           </div>
         )}
 
         {tab === 'draw' && (
-          <p className="font-mono text-sm text-[#5e3620]">
-            Importing your own PNGs and drawing pixel art arrive in a later pass — see
-            docs/ROOM_EDITOR.md Phase 3.
-          </p>
+          <DrawImportTab
+            capabilities={capabilities}
+            items={customItems}
+            objects={objects}
+            onCreate={onCreateCustomItem}
+            onReplace={onReplaceCustomItem}
+            onDelete={onDeleteCustomItem}
+            onPlace={onPlaceCustomItem}
+          />
         )}
 
         {tab === 'layers' && (
-          <LayersList objects={objects} selectedId={selectedId} onSelect={onSelect} onUpdate={onUpdateSelected} />
+          <LayersList objects={objects} selectedId={selectedId} onSelect={onSelect} onUpdate={onUpdateSelected} customItems={customItems} />
         )}
 
         {tab === 'permissions' && isHost && (
@@ -172,11 +193,14 @@ export default function EditPanel({
 
 function SelectedItemToolbar({
   item,
+  label,
   onUpdate,
   onDelete,
   onDeselect,
 }: {
   item: RoomObjectApi;
+  /** What to call the item: its catalog kind, or for a custom item the library name. */
+  label: string;
   onUpdate: (patch: RoomObjectPatch) => void;
   onDelete: () => void;
   onDeselect: () => void;
@@ -185,7 +209,7 @@ function SelectedItemToolbar({
   return (
     <div className="flex flex-col gap-2 border-2 border-[#ff3d8b] bg-white p-2">
       <div className="flex items-center justify-between">
-        <span className="font-mono text-xs uppercase text-[#5e3620]/70">{item.kind}</span>
+        <span className="font-mono text-xs uppercase text-[#5e3620]/70">{label}</span>
         <button type="button" onClick={onDeselect} className="font-mono text-xs text-[#5e3620]">
           deselect
         </button>
@@ -194,40 +218,40 @@ function SelectedItemToolbar({
         <button
           type="button"
           onClick={() => onUpdate({ scale: Math.max(LIMITS.minObjectScale, item.scale - step) })}
-          className="border-2 border-[#5e3620] px-2 py-1 font-mono text-xs"
+          className="border-2 border-[#5e3620] bg-[#fff6d5] px-2 py-1 font-mono text-xs text-[#5e3620]"
         >
           Scale −
         </button>
         <button
           type="button"
           onClick={() => onUpdate({ scale: Math.min(LIMITS.maxObjectScale, item.scale + step) })}
-          className="border-2 border-[#5e3620] px-2 py-1 font-mono text-xs"
+          className="border-2 border-[#5e3620] bg-[#fff6d5] px-2 py-1 font-mono text-xs text-[#5e3620]"
         >
           Scale +
         </button>
-        <button type="button" onClick={() => onUpdate({ flipX: !item.flipX })} className="border-2 border-[#5e3620] px-2 py-1 font-mono text-xs">
+        <button type="button" onClick={() => onUpdate({ flipX: !item.flipX })} className="border-2 border-[#5e3620] bg-[#fff6d5] px-2 py-1 font-mono text-xs text-[#5e3620]">
           Flip
         </button>
         <button
           type="button"
           onClick={() => onUpdate({ rotation: ((item.rotation + 90) % 360) as 0 | 90 | 180 | 270 })}
-          className="border-2 border-[#5e3620] px-2 py-1 font-mono text-xs"
+          className="border-2 border-[#5e3620] bg-[#fff6d5] px-2 py-1 font-mono text-xs text-[#5e3620]"
         >
           Rotate 90°
         </button>
-        <button type="button" onClick={() => onUpdate({ z: item.z + 10 })} className="border-2 border-[#5e3620] px-2 py-1 font-mono text-xs">
+        <button type="button" onClick={() => onUpdate({ z: item.z + 10 })} className="border-2 border-[#5e3620] bg-[#fff6d5] px-2 py-1 font-mono text-xs text-[#5e3620]">
           Forward
         </button>
-        <button type="button" onClick={() => onUpdate({ z: Math.max(0, item.z - 10) })} className="border-2 border-[#5e3620] px-2 py-1 font-mono text-xs">
+        <button type="button" onClick={() => onUpdate({ z: Math.max(0, item.z - 10) })} className="border-2 border-[#5e3620] bg-[#fff6d5] px-2 py-1 font-mono text-xs text-[#5e3620]">
           Backward
         </button>
-        <button type="button" onClick={() => onUpdate({ locked: !item.locked })} className="border-2 border-[#5e3620] px-2 py-1 font-mono text-xs">
+        <button type="button" onClick={() => onUpdate({ locked: !item.locked })} className="border-2 border-[#5e3620] bg-[#fff6d5] px-2 py-1 font-mono text-xs text-[#5e3620]">
           {item.locked ? 'Unlock' : 'Lock'}
         </button>
         <button
           type="button"
           onClick={() => onUpdate({ hidden: !item.hidden })}
-          className="border-2 border-[#5e3620] px-2 py-1 font-mono text-xs"
+          className="border-2 border-[#5e3620] bg-[#fff6d5] px-2 py-1 font-mono text-xs text-[#5e3620]"
         >
           {item.hidden ? 'Unhide' : 'Hide'}
         </button>
@@ -244,11 +268,13 @@ function LayersList({
   selectedId,
   onSelect,
   onUpdate,
+  customItems,
 }: {
   objects: RoomObjectApi[];
   selectedId: string | null;
   onSelect: (id: string) => void;
   onUpdate: (patch: RoomObjectPatch) => void;
+  customItems: CustomItemApi[];
 }) {
   void onUpdate;
   return (
@@ -262,7 +288,7 @@ function LayersList({
               selectedId === o.id ? 'border-[#ff3d8b] text-[#ff3d8b]' : 'border-[#e0b8c8] text-[#5e3620]'
             } ${o.hidden ? 'opacity-50' : ''}`}
           >
-            {o.kind} {o.locked ? '🔒' : ''} {o.hidden ? '(hidden)' : ''}
+            {o.kind === 'custom' ? customItems.find((i) => i.id === o.assetId)?.name || 'custom item' : o.kind} {o.locked ? '🔒' : ''} {o.hidden ? '(hidden)' : ''}
           </button>
         </li>
       ))}

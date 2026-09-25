@@ -16,6 +16,7 @@ export type RoomObjectData = {
   locked: boolean;
   hidden: boolean;
   configJson: string;
+  assetId: string | null;
   createdByRole: string;
   createdBySessionHash: string | null;
   updatedAt: string;
@@ -105,10 +106,22 @@ export class EditableObjectsLayer {
         // in-room sprite until edit mode was toggled off and back on. Position/scale/rotation
         // already refresh every call via applyTransform below; this is the one thing that didn't.
         if (state.obj.configJson !== obj.configJson) {
-          const dynamicTex = dynamicTextureFor(obj.kind, parseObjectConfig(obj.configJson));
+          const dynamicTex = dynamicTextureFor(obj.kind, parseObjectConfig(obj.configJson), obj.assetId);
           if (dynamicTex) {
             const sprite = this.sprites.get(obj.id);
             if (sprite) sprite.texture = dynamicTex;
+          }
+        }
+        // A custom item's pixels change without ITS row changing at all (the library entry was
+        // edited in the pixel editor and every placed copy should follow), so compare the texture
+        // itself — a plain map lookup, cheap enough to do on every sync for custom kinds only.
+        if (obj.kind === 'custom') {
+          const tex = dynamicTextureFor('custom', {}, obj.assetId);
+          const sprite = this.sprites.get(obj.id);
+          if (tex && sprite && sprite.texture !== tex) {
+            sprite.texture = tex;
+            const box = this.selectionBoxes.get(obj.id);
+            if (box) this.drawSelectionBox(box, sprite);
           }
         }
         // Update the snapshot the persistent handlers read from — never touch listeners here,
@@ -141,7 +154,7 @@ export class EditableObjectsLayer {
   private buildNode(obj: RoomObjectData): { node: Container; selectionBox: Graphics } {
     const node = new Container();
     const config = parseObjectConfig(obj.configJson);
-    const dynamicTex = dynamicTextureFor(obj.kind, config);
+    const dynamicTex = dynamicTextureFor(obj.kind, config, obj.assetId);
     const texture = dynamicTex ?? getTexture(manifestKeyFor(obj.kind));
     const sprite = new Sprite(texture);
     const anchor = anchorFor(obj.kind, obj.zone);

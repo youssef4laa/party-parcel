@@ -9,6 +9,8 @@ import { createBoxSprite, textureForDesign, animateSettle, attachHoverWobble } f
 import { showLabel } from './scene/interactions/label';
 import { PhotoWall } from './scene/interactions/photobooth';
 import { EditableObjectsLayer } from './scene/editableObjects';
+import { customTextureFor, loadCustomTexture, forgetCustomTexture } from './scene/objectSprites';
+import { defaultPlacementScale } from './pixelOps';
 import { demoLayoutObjects } from './scene/demoObjects';
 import { registerBannerText } from './manifest';
 import FrameModal from './ui/FrameModal';
@@ -17,10 +19,16 @@ import ContributeFlow from '@/contribute/ContributeFlow';
 import PhotoboothModal from '@/photobooth/PhotoboothModal';
 import PrintModal from '@/photobooth/PrintModal';
 import EditPanel from './edit/EditPanel';
+import { LIMITS } from '@/config/limits';
 import { createStubDataSource } from '@/contribute/stubDataSource';
 import { getOrCreateSessionToken } from './contributorSession';
 import {
   fetchRoomObjects,
+  fetchCustomItems,
+  createCustomItem,
+  replaceCustomItem,
+  deleteCustomItem,
+  type CustomItemApi,
   createRoomObject,
   updateRoomObject,
   deleteRoomObject,
@@ -82,6 +90,12 @@ const UNDO_WINDOW_MS = 60_000;
 const ROOM_EDITOR_DEFAULT_X = 700;
 const ROOM_EDITOR_DEFAULT_Y = 650;
 
+/** A custom item's pixels arrive over the network, so its object is held back from the scene until
+ * that texture is cached (loadCustomTexture) — otherwise it would first paint as an empty sprite. */
+function renderableObjects(list: RoomObjectApi[]): RoomObjectApi[] {
+  return list.filter((o) => o.kind !== 'custom' || (o.assetId !== null && customTextureFor(o.assetId) !== null));
+}
+
 export default function RoomCanvas({
   celebrantName = 'Alex',
   age,
@@ -126,6 +140,8 @@ export default function RoomCanvas({
   const [panelCollapsed, setPanelCollapsed] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [permissions, setPermissions] = useState<RoomPermissions | null>(null);
+  const [customItems, setCustomItems] = useState<CustomItemApi[]>([]);
+  const customItemsRef = useRef<CustomItemApi[]>([]);
   const [editError, setEditError] = useState<string | null>(null);
   const [sessionToken] = useState<string | undefined>(() => (roomToken ? getOrCreateSessionToken(roomToken) : undefined));
   const editModeRef = useRef(editMode);
@@ -135,15 +151,15 @@ export default function RoomCanvas({
     objectsRef.current = next;
     setObjects(next);
     const engine = engineRef.current;
-    if (engine) engine.editableLayer.setObjects(next, editModeRef.current, selectedIdRef.current);
+    if (engine) engine.editableLayer.setObjects(renderableObjects(next), editModeRef.current, selectedIdRef.current);
   }, []);
   useEffect(() => {
     editModeRef.current = editMode;
-    engineRef.current?.editableLayer.setObjects(objectsRef.current, editMode, selectedIdRef.current);
+    engineRef.current?.editableLayer.setObjects(renderableObjects(objectsRef.current), editMode, selectedIdRef.current);
   }, [editMode]);
   useEffect(() => {
     selectedIdRef.current = selectedId;
-    engineRef.current?.editableLayer.setObjects(objectsRef.current, editModeRef.current, selectedId);
+    engineRef.current?.editableLayer.setObjects(renderableObjects(objectsRef.current), editModeRef.current, selectedId);
   }, [selectedId]);
 
   const placeBoxSprite = useCallback(
@@ -262,6 +278,22 @@ export default function RoomCanvas({
         }
       }
 
+      // The room's custom-item library: fetched (and every image decoded into a texture) before the
+      // first paint, for the same reason the objects are — a placed custom item should never flash
+      // in as an empty sprite. Best-effort: a failure just leaves custom items unrendered.
+      if (roomToken) {
+        try {
+          const items = await fetchCustomItems(roomToken, sessionToken);
+          await Promise.all(items.map((i) => loadCustomTexture(i.id, i.url).catch(() => undefined)));
+          if (!destroyed) {
+            customItemsRef.current = items;
+            setCustomItems(items);
+          }
+        } catch {
+          // see above
+        }
+      }
+
       // The interactive/animated legacy scene (window, cake, cat, ...) — torn down and rebuilt by
       // the editMode-toggle effect below, never rendered at the same time as edit mode's plain
       // draggable version of the same rows (EditableObjectsLayer). See buildScene's SceneCallbacks
@@ -290,7 +322,7 @@ export default function RoomCanvas({
           void handleObjectMoved(id, x, y);
         },
       );
-      editableLayer.setObjects(initialObjects, editModeRef.current, selectedIdRef.current);
+      editableLayer.setObjects(renderableObjects(initialObjects), editModeRef.current, selectedIdRef.current);
 
       engineRef.current = {
         app: application,
@@ -346,7 +378,7 @@ export default function RoomCanvas({
         app.destroy(true, { children: true });
       }
     };
-  }, [bannerText, placeBoxSprite, source, handleRef, roomToken, handleObjectMoved, age]);
+  }, [bannerText, placeBoxSprite, source, handleRef, roomToken, handleObjectMoved, age, sessionToken]);
 
   // Rebuilds the interactive/animated legacy scene whenever edit mode toggles off (or, on the
   // very first render, is skipped — the main init effect above already built it once). Turning
@@ -399,6 +431,78 @@ export default function RoomCanvas({
         setSelectedId(created.id);
       } catch (e) {
         setEditError(e instanceof Error ? e.message : 'Could not add that item.');
+      }
+    },
+    [roomToken, sessionToken, syncObjects],
+  );
+
+  // --- Custom items: the room's "My items" library (docs/ROOM_EDITOR.md Phase 3) ---
+  // These throw on failure instead of setting `editError`: the Draw & Import tab shows the message
+  // next to the control that caused it (a too-big file, a full library), not in a global toast.
+
+  const refreshLibrary = useCallback(async () => {
+    if (!roomToken) return [];
+    const items = await fetchCustomItems(roomToken, sessionToken);
+    const ids = new Set(items.map((i) => i.id));
+    for (const old of customItemsRef.current) if (!ids.has(old.id)) forgetCustomTexture(old.id);
+    await Promise.all(items.map((i) => loadCustomTexture(i.id, i.url).catch(() => undefined)));
+    customItemsRef.current = items;
+    setCustomItems(items);
+    // Re-sync the scene: placed copies of an edited item pick up its new texture, and objects that
+    // were held back waiting for their texture appear.
+    engineRef.current?.editableLayer.setObjects(renderableObjects(objectsRef.current), editModeRef.current, selectedIdRef.current);
+    return items;
+  }, [roomToken, sessionToken]);
+
+  const handleCreateCustomItem = useCallback(
+    async (png: Blob, opts: { source: 'import' | 'drawing'; name: string }) => {
+      if (!roomToken) throw new Error('Not available here.');
+      const item = await createCustomItem(roomToken, sessionToken, png, opts);
+      await refreshLibrary();
+      return item;
+    },
+    [roomToken, sessionToken, refreshLibrary],
+  );
+
+  const handleReplaceCustomItem = useCallback(
+    async (itemId: string, png: Blob, opts: { source: 'import' | 'drawing'; name: string }) => {
+      if (!roomToken) throw new Error('Not available here.');
+      const item = await replaceCustomItem(roomToken, sessionToken, itemId, png, opts);
+      await refreshLibrary();
+      return item;
+    },
+    [roomToken, sessionToken, refreshLibrary],
+  );
+
+  const handleDeleteCustomItem = useCallback(
+    async (itemId: string) => {
+      if (!roomToken) throw new Error('Not available here.');
+      await deleteCustomItem(roomToken, sessionToken, itemId);
+      // The server removed every placed copy too — pull the fresh object list so none linger.
+      syncObjects(await fetchRoomObjects(roomToken));
+      setSelectedId(null);
+      await refreshLibrary();
+    },
+    [roomToken, sessionToken, refreshLibrary, syncObjects],
+  );
+
+  const handlePlaceCustomItem = useCallback(
+    async (item: CustomItemApi) => {
+      if (!roomToken) return;
+      setEditError(null);
+      try {
+        const created = await createRoomObject(roomToken, sessionToken, {
+          kind: 'custom',
+          assetId: item.id,
+          x: ROOM_EDITOR_DEFAULT_X,
+          y: ROOM_EDITOR_DEFAULT_Y,
+          zone: 'anywhere',
+          scale: defaultPlacementScale(item.width, item.height, { min: LIMITS.minObjectScale, max: LIMITS.maxObjectScale }),
+        });
+        syncObjects([...objectsRef.current, created]);
+        setSelectedId(created.id);
+      } catch (e) {
+        setEditError(e instanceof Error ? e.message : 'Could not place that item.');
       }
     },
     [roomToken, sessionToken, syncObjects],
@@ -588,6 +692,11 @@ export default function RoomCanvas({
           permissions={permissions}
           onSavePermissions={handleSavePermissions}
           age={age}
+          customItems={customItems}
+          onCreateCustomItem={handleCreateCustomItem}
+          onReplaceCustomItem={handleReplaceCustomItem}
+          onDeleteCustomItem={handleDeleteCustomItem}
+          onPlaceCustomItem={handlePlaceCustomItem}
         />
       )}
 

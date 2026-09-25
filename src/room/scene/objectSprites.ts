@@ -63,7 +63,7 @@ export function anchorFor(kind: string, zone: string): { x: number; y: number } 
 /** For kinds whose texture depends on the object's own configJson (a neon sign's custom text, a
  * balloon's color) rather than being a fixed manifest entry. Returns null for everything else,
  * meaning "use manifestKeyFor(kind) via getTexture() as normal". */
-export function dynamicTextureFor(kind: string, config: Record<string, unknown>): Texture | null {
+export function dynamicTextureFor(kind: string, config: Record<string, unknown>, assetId?: string | null): Texture | null {
   if (kind === 'neon-sign' && typeof config.text === 'string' && config.text.trim()) {
     const cacheKey = `neon-sign:${config.text}`;
     return getOrBuildCached(cacheKey, () => drawNeonSignText(config.text as string));
@@ -80,7 +80,36 @@ export function dynamicTextureFor(kind: string, config: Record<string, unknown>)
   if (kind === 'cake') {
     return cakeTextureFor(parseCakeConfig(config), true);
   }
+  // A custom item's pixels live in the room's library (a CustomItem row), fetched over the network
+  // — not drawn procedurally — so this only ever returns what loadCustomTexture() already cached.
+  // Null until then; RoomCanvas holds a custom object back from the scene until it's ready.
+  if (kind === 'custom') {
+    return assetId ? customTextureFor(assetId) : null;
+  }
   return null;
+}
+
+// --- Custom items (docs/ROOM_EDITOR.md Phase 3) ---
+const customTextures = new Map<string, { url: string; texture: Texture }>();
+
+export function customTextureFor(assetId: string): Texture | null {
+  return customTextures.get(assetId)?.texture ?? null;
+}
+
+/** Fetches a library item's image once per URL (the URL carries a version param that changes when
+ * the pixels do, so a changed URL means "reload"). Nearest-neighbor, like every other sprite. */
+export async function loadCustomTexture(assetId: string, url: string): Promise<void> {
+  if (customTextures.get(assetId)?.url === url) return;
+  const img = new Image();
+  img.src = url;
+  await img.decode();
+  const texture = Texture.from(img);
+  texture.source.scaleMode = 'nearest';
+  customTextures.set(assetId, { url, texture });
+}
+
+export function forgetCustomTexture(assetId: string) {
+  customTextures.delete(assetId);
 }
 
 const dynamicCache = new Map<string, Texture>();
