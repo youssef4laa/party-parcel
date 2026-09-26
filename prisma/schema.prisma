@@ -124,6 +124,15 @@ model Box {
   posX            Float
   posY            Float
   z               Int       @default(0)
+  /// Placement scale (Phase 4a) — multiplies the design's own S/M/L size. Bounded to
+  /// LIMITS.minPresentScale..maxPresentScale by the PATCH route, not by this column.
+  scale           Float     @default(1)
+  /// Hash of the contributor browser session that packed it (Phase 4a) — ownership for the
+  /// "canMoveOwnPresents" rule, same mechanism as RoomObject.createdBySessionHash. Null for boxes
+  /// sealed before this column existed (only the host can move those).
+  createdBySessionHash String?
+  /// Phase 4b: when true the recipient must open the inner gifts in sort order.
+  openInOrder     Boolean   @default(false)
   sealedAt        DateTime  @default(now())
   deleteTokenHash String
   openedAt        DateTime?
@@ -131,15 +140,38 @@ model Box {
   createdAt       DateTime  @default(now())
 
   goodies         Goodie[]
+  gifts           Gift[]
   assets          Asset[]
 
   @@index([roomId])
+}
+
+/// One separately wrapped gift inside a box (Phase 4b). EVERY box has at least one: boxes sealed
+/// before this table existed were backfilled with a single default gift holding all their goodies
+/// (see the migration), and a single-gift box simply skips the inner-gift step for the recipient.
+/// `label` and `designJson` are inner data — gated by the birthday lock exactly like goodie
+/// payloads (only the contents route returns them).
+model Gift {
+  id         String   @id @default(cuid())
+  boxId      String
+  box        Box      @relation(fields: [boxId], references: [id], onDelete: Cascade)
+  sortOrder  Int
+  label      String   @default("")
+  /// The gift's own compact wrap design; "{}" for a default/single gift (it has no wrap of its own).
+  designJson String   @default("{}")
+  goodies    Goodie[]
+
+  @@index([boxId])
 }
 
 model Goodie {
   id         String  @id @default(cuid())
   boxId      String
   box        Box     @relation(fields: [boxId], references: [id], onDelete: Cascade)
+  /// Which inner gift this goodie is wrapped in (Phase 4b). Nullable only so a row written by
+  /// anything that predates gifts can't violate the schema; every goodie the app creates has one.
+  giftId     String?
+  gift       Gift?   @relation(fields: [giftId], references: [id], onDelete: Cascade)
   type       String
   sortOrder  Int
   payloadJson String

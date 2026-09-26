@@ -1,6 +1,6 @@
 import { Sprite, Texture, Ticker } from 'pixi.js';
 import { renderBox } from '@/box/renderBox';
-import type { BoxDesign } from '@/box/types';
+import { sizeFactorOf, type BoxDesign } from '@/box/types';
 
 export const BOX_WORLD_SIZE = 64;
 
@@ -11,12 +11,20 @@ export function textureForDesign(design: BoxDesign, mode: 'closed' | 'open' = 'c
   return texture;
 }
 
+/** A present's on-screen size in world px: the fixed base footprint, times the design's own S/M/L
+ * size, times its placement scale (docs/ROOM_EDITOR.md Phase 4a). Size M at scale 1 is exactly the
+ * original 64px, so presents placed before either existed look identical. */
+export function boxWorldSize(design: BoxDesign, scale = 1) {
+  return BOX_WORLD_SIZE * sizeFactorOf(design) * scale;
+}
+
 /** A present sprite anchored at its base (bottom-center), sized to its footprint in the room. */
-export function createBoxSprite(design: BoxDesign, mode: 'closed' | 'open' = 'closed') {
+export function createBoxSprite(design: BoxDesign, mode: 'closed' | 'open' = 'closed', scale = 1) {
   const s = new Sprite(textureForDesign(design, mode));
   s.anchor.set(0.5, 1);
-  s.width = BOX_WORLD_SIZE;
-  s.height = BOX_WORLD_SIZE;
+  const size = boxWorldSize(design, scale);
+  s.width = size;
+  s.height = size;
   return s;
 }
 
@@ -44,10 +52,15 @@ export function animateSettle(sprite: Sprite, ticker: Ticker, reducedMotion: boo
 
 /** Hover lift + wobble for a placed present. */
 export function attachHoverWobble(sprite: Sprite, ticker: Ticker) {
-  const baseScale = { x: sprite.scale.x, y: sprite.scale.y };
+  // Captured when a hover STARTS, not once at attach time: a present can be resized while the
+  // wobble is attached (Phase 4a), and restoring a stale scale on pointerout would silently undo it.
+  let baseScale = { x: sprite.scale.x, y: sprite.scale.y };
   let hovering = false;
   let t = 0;
-  sprite.on('pointerover', () => (hovering = true));
+  sprite.on('pointerover', () => {
+    if (!hovering) baseScale = { x: sprite.scale.x, y: sprite.scale.y };
+    hovering = true;
+  });
   sprite.on('pointerout', () => {
     hovering = false;
     sprite.rotation = 0;

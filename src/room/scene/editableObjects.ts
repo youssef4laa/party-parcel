@@ -79,10 +79,14 @@ export class EditableObjectsLayer {
     world.addChild(this.container);
   }
 
-  /** In view mode, legacy kinds are excluded — buildScene.ts renders those instead, with their
+  /** `interactive` is whether nodes are selectable/draggable — it defaults to `editMode`, but differs
+   * for someone in edit mode who may move presents and NOT room objects (docs/ROOM_EDITOR.md 4a):
+   * they still see the edit-mode render, they just can't grab anything in it.
+   *
+   * In view mode, legacy kinds are excluded — buildScene.ts renders those instead, with their
    * full interactive/animated behavior. In edit mode, every non-hidden kind (legacy included)
    * renders here as a plain draggable node. See the LEGACY_KINDS comment above. */
-  setObjects(objects: RoomObjectData[], editMode: boolean, selectedId: string | null) {
+  setObjects(objects: RoomObjectData[], editMode: boolean, selectedId: string | null, interactive: boolean = editMode) {
     const visible = objects.filter((o) => !o.hidden && (editMode || !isLegacyKind(o.kind)));
     const seen = new Set<string>();
 
@@ -129,10 +133,10 @@ export class EditableObjectsLayer {
         // setObjects can land mid-gesture, e.g. right after the drag's own pointerdown selects
         // the object and triggers a re-render).
         state.obj = obj;
-        state.editMode = editMode;
+        state.editMode = interactive;
       }
       if (!state?.dragging) this.applyTransform(node, obj);
-      this.applyStaticInteractivity(node, obj, editMode, selectedId === obj.id);
+      this.applyStaticInteractivity(node, obj, interactive, selectedId === obj.id);
     }
 
     for (const [id, node] of this.nodes) {

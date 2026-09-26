@@ -1,6 +1,6 @@
 import type { Application, Sprite } from 'pixi.js';
 import type { BoxDesign } from '@/box/types';
-import { createBoxSprite, BOX_WORLD_SIZE } from './presentBox';
+import { createBoxSprite, boxWorldSize } from './presentBox';
 import { getDropZones, nearestPointInZones, isInsideZones } from '../constants';
 import type { attachCamera } from './camera';
 
@@ -128,7 +128,8 @@ export function attachPlacement(app: Application, camera: Camera) {
 
     floating = createBoxSprite(design);
     floating.anchor.set(0.5, 0.5);
-    const displaySize = BOX_WORLD_SIZE * camera.getScale();
+    // the ghost is as big as the present will actually be (its S/M/L size), so what you place is what you get
+    const displaySize = boxWorldSize(design) * camera.getScale();
     floating.width = displaySize;
     floating.height = displaySize;
     floating.alpha = 0.9;

@@ -17,7 +17,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ boxI
 
   const box = await prisma.box.findUnique({
     where: { id: boxId },
-    include: { goodies: { orderBy: { sortOrder: 'asc' }, include: { redemption: true } } },
+    include: {
+      goodies: { orderBy: { sortOrder: 'asc' }, include: { redemption: true } },
+      gifts: { orderBy: { sortOrder: 'asc' } },
+    },
   });
   if (!box) return jsonError(404, 'Present not found.');
 
@@ -51,9 +54,38 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ boxI
     }),
   );
 
+  // Group the same goodie objects by the gift they're wrapped in. A box sealed before gifts existed
+  // was backfilled with one default gift, and a goodie with no gift (nothing the app writes, but
+  // possible in a hand-edited DB) falls back to the first gift rather than vanishing.
+  const giftIds = new Set(box.gifts.map((g) => g.id));
+  const byGift = new Map<string, typeof goodies>();
+  for (const [i, g] of goodies.entries()) {
+    const raw = box.goodies[i].giftId;
+    const key = raw && giftIds.has(raw) ? raw : (box.gifts[0]?.id ?? '');
+    byGift.set(key, [...(byGift.get(key) ?? []), g]);
+  }
+  const gifts = box.gifts.map((g) => {
+    let design: unknown = {};
+    try {
+      design = JSON.parse(g.designJson);
+    } catch {
+      // a malformed stored design just means the gift shows the default wrap
+    }
+    return { id: g.id, label: g.label, design, sortOrder: g.sortOrder, goodies: byGift.get(g.id) ?? [] };
+  });
+
   if (!box.openedAt) {
     await prisma.box.update({ where: { id: box.id }, data: { openedAt: new Date() } });
   }
 
-  return NextResponse.json({ fromName: box.fromName, design: JSON.parse(box.designJson), goodies });
+  // `goodies` stays the flat, box-ordered list every existing reader expects; `gifts` is the same
+  // goodies grouped by gift, plus each gift's label and wrap design (only present here, behind the
+  // lock, never in the public box list).
+  return NextResponse.json({
+    fromName: box.fromName,
+    design: JSON.parse(box.designJson),
+    openInOrder: box.openInOrder,
+    goodies,
+    gifts,
+  });
 }

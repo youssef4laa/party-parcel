@@ -88,6 +88,21 @@ export function canMutateObjects(input: {
   return false;
 }
 
+/**
+ * Who may move/resize/reorder a placed present (docs/ROOM_EDITOR.md Phase 4a): the host always; a
+ * contributor only for a present they packed and only when the host turned on `canMoveOwnPresents`;
+ * never the celebrant (they open presents, they don't rearrange them — `canRearrange` covers room
+ * objects only); nobody but the host while the layout is frozen. Only position, scale, and z ever
+ * change — see UpdatePresentSchema. Like every rule here, this is the real boundary; the
+ * `presents:move-*` capabilities are only a display hint.
+ */
+export function canMovePresent(input: { role: RoomRole; permissions: RoomPermissions; isOwner: boolean }): boolean {
+  const { role, permissions, isOwner } = input;
+  if (role === 'admin') return true;
+  if (permissions.freezeLayout) return false;
+  return role === 'contribute' && permissions.contributors.canMoveOwnPresents && isOwner;
+}
+
 export type CustomItemAction = 'create' | 'update' | 'delete';
 export type CustomItemSource = 'import' | 'drawing';
 

@@ -14,6 +14,16 @@ export type BowStyle = 'none' | 'classic' | 'big' | 'double' | 'ruffle' | 'knot'
 export type TagShape = 'none' | 'heart' | 'star' | 'round';
 export type StickerShape = 'none' | 'heart' | 'star' | 'sparkle' | 'paw';
 export type TopperShape = 'none' | 'flower' | 'leaf' | 'candle';
+/** How big the present sits in the room before any placement scaling (docs/ROOM_EDITOR.md 4a). */
+export type BoxSize = 'S' | 'M' | 'L';
+
+/** World-size multiplier per BoxSize. M is exactly the original fixed 64px footprint, so every
+ * design saved before this property existed (no `size`) renders unchanged. */
+export const BOX_SIZE_FACTOR: Record<BoxSize, number> = { S: 0.75, M: 1, L: 1.5 };
+
+export function sizeFactorOf(design: { size?: BoxSize }): number {
+  return BOX_SIZE_FACTOR[design.size ?? 'M'] ?? 1;
+}
 
 export type BoxDesign = {
   shape: BoxShape;
@@ -27,6 +37,8 @@ export type BoxDesign = {
   tagText: string;
   sticker: StickerShape;
   topper: TopperShape;
+  /** Optional so designs saved before sizes existed stay valid — absent means 'M'. */
+  size?: BoxSize;
 };
 
 /** 12 curated swatches, warm/cozy/pastel to match the room's palette. Shared across base/accent/ribbon pickers. */

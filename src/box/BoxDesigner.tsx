@@ -9,6 +9,7 @@ import {
   DEFAULT_DESIGN,
   SWATCHES,
   type BoxDesign,
+  type BoxSize,
   type BowStyle,
   type BoxPattern,
   type BoxShape,
@@ -22,6 +23,12 @@ const SHAPES: { value: BoxShape; label: string }[] = [
   { value: 'cube', label: 'Cube' },
   { value: 'tall', label: 'Tall' },
   { value: 'flat', label: 'Flat' },
+];
+
+const SIZES: { value: BoxSize; label: string }[] = [
+  { value: 'S', label: 'Small' },
+  { value: 'M', label: 'Medium' },
+  { value: 'L', label: 'Large' },
 ];
 
 const PATTERNS: { value: BoxPattern; label: string }[] = [
@@ -82,7 +89,13 @@ function randomSwatch() {
 }
 
 function designsEqual(a: BoxDesign, b: BoxDesign) {
-  return JSON.stringify(a) === JSON.stringify(b);
+  // Size is a placement property of the finished present, not part of what a "preset" look is —
+  // picking Large must not turn "Pink Hearts" into "Custom design".
+  const { size: _a, ...restA } = a;
+  const { size: _b, ...restB } = b;
+  void _a;
+  void _b;
+  return JSON.stringify(restA) === JSON.stringify(restB);
 }
 
 function matchingPresetName(design: BoxDesign) {
@@ -158,6 +171,9 @@ export type BoxDesignerProps = {
   onChange?: (design: BoxDesign) => void;
   onSave?: (design: BoxDesign) => void;
   saveLabel?: string;
+  /** Inner-gift mode (docs/ROOM_EDITOR.md 4b "compact wrap design"): a smaller stacked layout, no
+   * export button, and no size row — S/M/L belongs to the outer box that sits in the room. */
+  compact?: boolean;
 };
 
 export default function BoxDesigner({
@@ -165,6 +181,7 @@ export default function BoxDesigner({
   onChange,
   onSave,
   saveLabel = 'Wrap it up',
+  compact = false,
 }: BoxDesignerProps) {
   const [history, setHistory] = useState<BoxDesign[]>([initialDesign]);
   const [index, setIndex] = useState(0);
@@ -205,9 +222,10 @@ export default function BoxDesigner({
       tagText: design.tagText,
       sticker: randomOf(STICKERS),
       topper: randomOf(TOPPERS),
+      size: design.size,
     });
 
-  const applyPreset = (presetDesign: BoxDesign) => commit({ ...presetDesign, tagText: design.tagText });
+  const applyPreset = (presetDesign: BoxDesign) => commit({ ...presetDesign, tagText: design.tagText, size: design.size });
 
   const exportPng = () => {
     const canvas = renderBox(design);
@@ -220,8 +238,15 @@ export default function BoxDesigner({
   const presetName = useMemo(() => matchingPresetName(design), [design]);
 
   return (
-    <div className="flex flex-col gap-6 md:flex-row">
-      <div className="flex-1 md:max-w-sm">
+    <div className={`flex gap-6 ${compact ? 'flex-col-reverse' : 'flex-col md:flex-row'}`}>
+      <div className={`flex-1 ${compact ? '' : 'md:max-w-sm'}`}>
+        {!compact && (
+          <>
+            <SectionLabel>Size in the room</SectionLabel>
+            <ChoiceRow options={SIZES} value={design.size ?? 'M'} onChange={(v) => update('size', v)} />
+          </>
+        )}
+
         <SectionLabel>Shape</SectionLabel>
         <ChoiceRow options={SHAPES} value={design.shape} onChange={(v) => update('shape', v)} />
 
@@ -279,7 +304,7 @@ export default function BoxDesigner({
 
       <div className="flex flex-1 flex-col items-center gap-3">
         <div className="border-4 border-[#ff3d8b] bg-[#fff6d5] p-3">
-          <BoxPreview design={design} size={288} />
+          <BoxPreview design={design} size={compact ? 160 : 288} />
         </div>
         <p className="font-pixel text-[10px] text-[#5e3620]">{presetName}</p>
 
@@ -314,6 +339,7 @@ export default function BoxDesigner({
           >
             Reset
           </button>
+          {!compact && (
           <button
             type="button"
             onClick={exportPng}
@@ -321,6 +347,7 @@ export default function BoxDesigner({
           >
             Export PNG
           </button>
+          )}
         </div>
 
         {onSave && (

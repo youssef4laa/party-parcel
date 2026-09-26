@@ -19,6 +19,7 @@ export default function GoodieShelf({
   onUpdate,
   onRemove,
   onReorder,
+  boxGoodieCount,
 }: {
   goodies: GoodieItem[];
   roomToken?: string;
@@ -26,10 +27,13 @@ export default function GoodieShelf({
   onUpdate: (id: string, item: GoodieItem) => void;
   onRemove: (id: string) => void;
   onReorder: (id: string, dir: -1 | 1) => void;
+  /** The goodie count for the WHOLE box when this shelf is one gift among several — the per-box
+   * limit applies to the total, not to each gift (docs/ROOM_EDITOR.md 4b). */
+  boxGoodieCount?: number;
 }) {
   const [editing, setEditing] = useState<{ type: GoodieType; item?: GoodieItem } | null>(null);
   const totalBytes = goodies.reduce((sum, g) => sum + g.sizeBytes, 0);
-  const atLimit = goodies.length >= LIMITS.maxGoodiesPerBox;
+  const atLimit = (boxGoodieCount ?? goodies.length) >= LIMITS.maxGoodiesPerBox;
 
   const EditorComponent = editing ? GOODIE_EDITORS[editing.type] : null;
 

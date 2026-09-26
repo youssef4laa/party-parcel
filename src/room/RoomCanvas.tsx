@@ -1,11 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Application, Container, Sprite } from 'pixi.js';
+import { Application, Container, Graphics, Sprite } from 'pixi.js';
 import { attachCamera } from './scene/camera';
 import { buildScene, mountBackground } from './scene/buildScene';
 import { attachPlacement } from './scene/placement';
-import { createBoxSprite, textureForDesign, animateSettle, attachHoverWobble } from './scene/presentBox';
+import { createBoxSprite, textureForDesign, animateSettle, attachHoverWobble, boxWorldSize } from './scene/presentBox';
 import { showLabel } from './scene/interactions/label';
 import { PhotoWall } from './scene/interactions/photobooth';
 import { EditableObjectsLayer } from './scene/editableObjects';
@@ -19,12 +19,15 @@ import ContributeFlow from '@/contribute/ContributeFlow';
 import PhotoboothModal from '@/photobooth/PhotoboothModal';
 import PrintModal from '@/photobooth/PrintModal';
 import EditPanel from './edit/EditPanel';
+import { getDropZones, nearestPointInZones } from './constants';
 import { LIMITS } from '@/config/limits';
 import { createStubDataSource } from '@/contribute/stubDataSource';
 import { getOrCreateSessionToken } from './contributorSession';
 import {
   fetchRoomObjects,
   fetchCustomItems,
+  updateBox,
+  type PresentPatch,
   createCustomItem,
   replaceCustomItem,
   deleteCustomItem,
@@ -90,6 +93,12 @@ const UNDO_WINDOW_MS = 60_000;
 const ROOM_EDITOR_DEFAULT_X = 700;
 const ROOM_EDITOR_DEFAULT_Y = 650;
 
+/** Room objects are only grabbable in edit mode by someone who may edit objects — a contributor who
+ * may only move presents still sees the edit-mode render, but can't drag the furniture. */
+function objectsInteractive(edit: boolean, capabilities: string[]) {
+  return edit && capabilities.includes('objects:edit-mode');
+}
+
 /** A custom item's pixels arrive over the network, so its object is held back from the scene until
  * that texture is cached (loadCustomTexture) — otherwise it would first paint as an empty sprite. */
 function renderableObjects(list: RoomObjectApi[]): RoomObjectApi[] {
@@ -141,6 +150,21 @@ export default function RoomCanvas({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [permissions, setPermissions] = useState<RoomPermissions | null>(null);
   const [customItems, setCustomItems] = useState<CustomItemApi[]>([]);
+  // Placed presents (docs/ROOM_EDITOR.md Phase 4a): the live placement data (position, scale, z, and
+  // whether this browser may move it) behind each sprite, mirrored into state for the edit panel.
+  const presentsRef = useRef<Map<string, PlacedBox>>(new Map());
+  const outlinesRef = useRef<Map<string, Graphics>>(new Map());
+  const [presents, setPresents] = useState<PlacedBox[]>([]);
+  const [selectedPresentId, setSelectedPresentId] = useState<string | null>(null);
+  const capabilitiesRef = useRef(capabilities);
+  const rebuildPresentsState = useCallback(() => setPresents([...presentsRef.current.values()]), []);
+  /** Display-hint mirror of the server's canMovePresent (permissions.ts) — the PATCH re-checks. */
+  const canMovePresentHint = useCallback(
+    (box: PlacedBox) =>
+      capabilitiesRef.current.includes('presents:move-any') ||
+      (capabilitiesRef.current.includes('presents:move-own') && box.mine === true),
+    [],
+  );
   const customItemsRef = useRef<CustomItemApi[]>([]);
   const [editError, setEditError] = useState<string | null>(null);
   const [sessionToken] = useState<string | undefined>(() => (roomToken ? getOrCreateSessionToken(roomToken) : undefined));
@@ -151,31 +175,116 @@ export default function RoomCanvas({
     objectsRef.current = next;
     setObjects(next);
     const engine = engineRef.current;
-    if (engine) engine.editableLayer.setObjects(renderableObjects(next), editModeRef.current, selectedIdRef.current);
+    if (engine) engine.editableLayer.setObjects(renderableObjects(next), editModeRef.current, selectedIdRef.current, objectsInteractive(editModeRef.current, capabilitiesRef.current));
   }, []);
   useEffect(() => {
     editModeRef.current = editMode;
-    engineRef.current?.editableLayer.setObjects(renderableObjects(objectsRef.current), editMode, selectedIdRef.current);
+    engineRef.current?.editableLayer.setObjects(renderableObjects(objectsRef.current), editMode, selectedIdRef.current, objectsInteractive(editMode, capabilitiesRef.current));
   }, [editMode]);
   useEffect(() => {
+    capabilitiesRef.current = capabilities;
+  }, [capabilities]);
+  useEffect(() => {
     selectedIdRef.current = selectedId;
-    engineRef.current?.editableLayer.setObjects(renderableObjects(objectsRef.current), editModeRef.current, selectedId);
+    engineRef.current?.editableLayer.setObjects(renderableObjects(objectsRef.current), editModeRef.current, selectedId, objectsInteractive(editModeRef.current, capabilitiesRef.current));
   }, [selectedId]);
+
+  const syncOutline = useCallback((id: string, x: number, y: number) => {
+    const outline = outlinesRef.current.get(id);
+    if (outline && !outline.destroyed) outline.position.set(x, y);
+  }, []);
+
+  /** Applies a present's stored placement (position, stacking, size) to its sprite. */
+  const applyPresentToSprite = useCallback((box: PlacedBox) => {
+    const entry = engineRef.current?.boxSprites.get(box.id);
+    if (!entry) return;
+    syncOutline(box.id, box.x, box.y);
+    entry.sprite.position.set(box.x, box.y);
+    entry.sprite.zIndex = box.z ?? 0;
+    const size = boxWorldSize(box.design, box.scale ?? 1);
+    entry.sprite.width = size;
+    entry.sprite.height = size;
+  }, [syncOutline]);
+
+  /** Sends a move/resize/reorder to the server; on refusal the sprite snaps back and the reason is
+   * shown. The server is the real gate (canMovePresent) — this just keeps the UI honest about it. */
+  const persistPresent = useCallback(
+    async (id: string, patch: PresentPatch) => {
+      const before = presentsRef.current.get(id);
+      if (!roomToken || !before) return;
+      setEditError(null);
+      try {
+        const { box: saved } = await updateBox(roomToken, id, patch, deleteTokensRef.current.get(id));
+        const next: PlacedBox = { ...before, x: saved.x, y: saved.y, z: saved.z, scale: saved.scale };
+        presentsRef.current.set(id, next);
+        applyPresentToSprite(next);
+      } catch (e) {
+        applyPresentToSprite(before);
+        setEditError(e instanceof Error ? e.message : 'Could not move that present.');
+      }
+      rebuildPresentsState();
+    },
+    [roomToken, applyPresentToSprite, rebuildPresentsState],
+  );
 
   const placeBoxSprite = useCallback(
     (box: PlacedBox, animate: boolean) => {
       const engine = engineRef.current;
       if (!engine) return;
       designsRef.current.set(box.id, box.design);
-      const sprite = createBoxSprite(box.design, box.opened ? 'open' : 'closed');
+      presentsRef.current.set(box.id, box);
+      const sprite = createBoxSprite(box.design, box.opened ? 'open' : 'closed', box.scale ?? 1);
       sprite.position.set(box.x, box.y);
+      sprite.zIndex = box.z ?? 0;
       sprite.eventMode = 'static';
       sprite.cursor = 'pointer';
       sprite.accessible = true;
       sprite.accessibleTitle = `Sealed present from ${box.fromName}`;
       const removeWobble = attachHoverWobble(sprite, engine.app.ticker);
+
+      // Edit mode (Phase 4a): a present this browser may move becomes selectable and draggable,
+      // exactly like a room object; anyone else's present (or any present outside edit mode)
+      // behaves as it always did.
+      const editable = () => {
+        const cur = presentsRef.current.get(box.id);
+        return editModeRef.current && cur !== undefined && canMovePresentHint(cur);
+      };
+      let dragging: { px: number; py: number; ox: number; oy: number; moved: boolean } | null = null;
+      sprite.on('pointerdown', (e) => {
+        if (!editable()) return;
+        const cur = presentsRef.current.get(box.id)!;
+        dragging = { px: e.global.x, py: e.global.y, ox: cur.x, oy: cur.y, moved: false };
+        setSelectedId(null);
+        setSelectedPresentId(box.id);
+        e.stopPropagation(); // keep the camera from panning while a present is being dragged
+      });
+      sprite.on('globalpointermove', (e) => {
+        if (!dragging) return;
+        const scale = engine.camera.getScale();
+        const dx = (e.global.x - dragging.px) / scale;
+        const dy = (e.global.y - dragging.py) / scale;
+        if (Math.abs(dx) + Math.abs(dy) > 2) dragging.moved = true;
+        sprite.position.set(dragging.ox + dx, dragging.oy + dy);
+        syncOutline(box.id, sprite.x, sprite.y);
+      });
+      const endDrag = () => {
+        if (!dragging) return;
+        const d = dragging;
+        dragging = null;
+        if (!d.moved) return;
+        // Presents rest on the table or floor (the same drop zones a new present is placed into);
+        // the host can put one anywhere.
+        const rest = isHost ? { x: sprite.x, y: sprite.y } : nearestPointInZones(sprite.x, sprite.y, getDropZones());
+        sprite.position.set(rest.x, rest.y);
+        syncOutline(box.id, rest.x, rest.y);
+        void persistPresent(box.id, { x: Math.round(rest.x), y: Math.round(rest.y) });
+      };
+      sprite.on('pointerup', endDrag);
+      sprite.on('pointerupoutside', endDrag);
+
       sprite.on('pointertap', () => {
         if (engine.camera.drag.wasDragging) return;
+        if (editable()) return; // selecting/dragging, not opening
         if (onBoxClick) {
           onBoxClick(box);
         } else {
@@ -185,8 +294,9 @@ export default function RoomCanvas({
       engine.world.addChild(sprite);
       engine.boxSprites.set(box.id, { sprite, cleanup: removeWobble });
       if (animate) animateSettle(sprite, engine.app.ticker, engine.reducedMotion);
+      rebuildPresentsState();
     },
-    [onBoxClick],
+    [onBoxClick, canMovePresentHint, persistPresent, rebuildPresentsState, isHost, syncOutline],
   );
 
   const handleObjectMoved = useCallback(
@@ -249,6 +359,9 @@ export default function RoomCanvas({
       host.appendChild(application.canvas);
 
       const world = new Container();
+      // Presents are ordered by their own z (Phase 4a); every other world child keeps zIndex 0 and so
+      // keeps its existing insertion order, which is why turning this on changes nothing else.
+      world.sortableChildren = true;
       application.stage.addChild(world);
       mountBackground(world);
 
@@ -317,12 +430,15 @@ export default function RoomCanvas({
         camera.drag,
         () => camera.getScale(),
         application.ticker,
-        (id) => setSelectedId(id),
+        (id) => {
+          setSelectedId(id);
+          if (id !== null) setSelectedPresentId(null);
+        },
         (id, x, y) => {
           void handleObjectMoved(id, x, y);
         },
       );
-      editableLayer.setObjects(renderableObjects(initialObjects), editModeRef.current, selectedIdRef.current);
+      editableLayer.setObjects(renderableObjects(initialObjects), editModeRef.current, selectedIdRef.current, objectsInteractive(editModeRef.current, capabilitiesRef.current));
 
       engineRef.current = {
         app: application,
@@ -450,7 +566,7 @@ export default function RoomCanvas({
     setCustomItems(items);
     // Re-sync the scene: placed copies of an edited item pick up its new texture, and objects that
     // were held back waiting for their texture appear.
-    engineRef.current?.editableLayer.setObjects(renderableObjects(objectsRef.current), editModeRef.current, selectedIdRef.current);
+    engineRef.current?.editableLayer.setObjects(renderableObjects(objectsRef.current), editModeRef.current, selectedIdRef.current, objectsInteractive(editModeRef.current, capabilitiesRef.current));
     return items;
   }, [roomToken, sessionToken]);
 
@@ -507,6 +623,52 @@ export default function RoomCanvas({
     },
     [roomToken, sessionToken, syncObjects],
   );
+
+  /** The selected present's toolbar: only position, scale, and z ever go over the wire (the PATCH
+   * schema is strict about it), so there is nothing here that could touch a present's contents. */
+  const handleUpdatePresent = useCallback(
+    (patch: PresentPatch) => {
+      if (!selectedPresentId) return;
+      const clamped: PresentPatch = { ...patch };
+      if (clamped.scale !== undefined) {
+        clamped.scale = Math.min(LIMITS.maxPresentScale, Math.max(LIMITS.minPresentScale, clamped.scale));
+      }
+      void persistPresent(selectedPresentId, clamped);
+    },
+    [selectedPresentId, persistPresent],
+  );
+
+  // The pink outline around the selected present (only while editing). A Pixi v8 Sprite is a leaf
+  // node and cannot have children, so this is its own Graphics in the world, kept over the sprite
+  // (redrawn here whenever its size changes, and repositioned by syncOutline as it's dragged).
+  useEffect(() => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    const outlines = outlinesRef.current;
+    for (const [id, outline] of outlines) {
+      if (!engine.boxSprites.has(id)) {
+        outline.destroy();
+        outlines.delete(id);
+      }
+    }
+    for (const [id, entry] of engine.boxSprites) {
+      const show = editMode && id === selectedPresentId;
+      let outline = outlines.get(id);
+      if (show) {
+        if (!outline || outline.destroyed) {
+          outline = new Graphics();
+          engine.world.addChild(outline);
+          outlines.set(id, outline);
+        }
+        const { width: w, height: h } = entry.sprite;
+        outline.clear();
+        outline.rect(-w / 2 - 3, -h - 3, w + 6, h + 6).stroke({ width: 3, color: 0xff3d8b });
+        outline.position.set(entry.sprite.x, entry.sprite.y);
+        outline.zIndex = entry.sprite.zIndex + 0.5;
+      }
+      if (outline && !outline.destroyed) outline.visible = show;
+    }
+  }, [editMode, selectedPresentId, presents]);
 
   const handleUpdateSelected = useCallback(
     async (patch: RoomObjectPatch) => {
@@ -578,7 +740,7 @@ export default function RoomCanvas({
       try {
         const { id, deleteToken } = await source.create(contribution, x, stackedY);
         if (deleteToken) deleteTokensRef.current.set(id, deleteToken);
-        const box: PlacedBox = { id, fromName: contribution.fromName, design: contribution.design, x, y: stackedY, placedAt: Date.now() };
+        const box: PlacedBox = { id, fromName: contribution.fromName, design: contribution.design, x, y: stackedY, placedAt: Date.now(), scale: 1, z: 0, mine: true };
         placeBoxSprite(box, true);
 
         setUndoToast({ boxId: box.id, fromName: box.fromName });
@@ -609,6 +771,8 @@ export default function RoomCanvas({
     entry?.cleanup();
     entry?.sprite.destroy();
     engine?.boxSprites.delete(undoToast.boxId);
+    presentsRef.current.delete(undoToast.boxId);
+    rebuildPresentsState();
     const deleteToken = deleteTokensRef.current.get(undoToast.boxId);
     setUndoToast(null);
     if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
@@ -651,7 +815,7 @@ export default function RoomCanvas({
           capabilities list grants it — but this is a display hint, never the actual boundary;
           every mutation route re-checks the real rule independently regardless of whether this
           button is even shown. */}
-      {ready && roomToken && capabilities.includes('objects:edit-mode') && !placingHint && (
+      {ready && roomToken && (capabilities.includes('objects:edit-mode') || capabilities.some((c) => c.startsWith('presents:move'))) && !placingHint && (
         <button
           type="button"
           onClick={() => {
@@ -682,7 +846,10 @@ export default function RoomCanvas({
           capabilities={capabilities}
           objects={objects}
           selectedId={selectedId}
-          onSelect={setSelectedId}
+          onSelect={(id) => {
+            setSelectedId(id);
+            if (id !== null) setSelectedPresentId(null);
+          }}
           onAddItem={handleAddItem}
           onUpdateSelected={handleUpdateSelected}
           onDeleteSelected={handleDeleteSelected}
@@ -693,6 +860,14 @@ export default function RoomCanvas({
           onSavePermissions={handleSavePermissions}
           age={age}
           customItems={customItems}
+          presents={presents}
+          selectedPresentId={selectedPresentId}
+          onSelectPresent={(id) => {
+            setSelectedPresentId(id);
+            if (id !== null) setSelectedId(null);
+          }}
+          onUpdatePresent={handleUpdatePresent}
+          canMovePresent={canMovePresentHint}
           onCreateCustomItem={handleCreateCustomItem}
           onReplaceCustomItem={handleReplaceCustomItem}
           onDeleteCustomItem={handleDeleteCustomItem}

@@ -12,6 +12,8 @@ export default function GoodieUnwrapFlow({
   fromName,
   onDone,
   onRedeem,
+  subtitle,
+  initialMode,
 }: {
   goodies: ViewerGoodie[];
   boxId: string;
@@ -19,13 +21,22 @@ export default function GoodieUnwrapFlow({
   fromName: string;
   onDone: () => void;
   onRedeem?: (goodieId: string) => Promise<{ redeemedAt: string }>;
+  /** Shown under the heading — a multi-gift box passes the gift's label here (Phase 4b). */
+  subtitle?: string;
+  /** Skips the "one by one or all at once" choice; used when the recipient already asked to open everything. */
+  initialMode?: 'choose' | 'all';
 }) {
-  const [mode, setMode] = useState<'choose' | 'one' | 'all'>(goodies.length > 0 ? 'choose' : 'all');
+  const [mode, setMode] = useState<'choose' | 'one' | 'all'>(goodies.length > 0 ? (initialMode ?? 'choose') : 'all');
   const [index, setIndex] = useState(0);
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center gap-4 overflow-auto bg-black/80 p-4 py-8">
       <p className="font-pixel text-sm text-[#fff6d5]">A PRESENT FROM {fromName.toUpperCase()}</p>
+      {subtitle && (
+        <p data-testid="unwrap-subtitle" className="font-mono text-base text-[#ffd166]">
+          {subtitle}
+        </p>
+      )}
 
       {mode === 'choose' && (
         <div className="flex flex-1 flex-col items-center justify-center gap-4">

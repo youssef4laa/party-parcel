@@ -11,9 +11,13 @@ import { GoodiePayloadSchema } from '@/goodies/schema';
 import { fetchLinkPreview } from '@/server/linkPreview';
 import { getStorageProvider } from '@/server/storage';
 import { sniffMime } from '@/server/mimeSniff';
+import { parseGiftInputs, type GiftInput } from '@/server/boxes';
+import { sessionHashFrom } from '@/server/customItems';
 
-/** Boxes list is metadata only (sender + time), regardless of role — never goodie contents. */
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
+/** Boxes list is metadata only (sender + time + placement), regardless of role — never goodie
+ * contents, and never anything about the gifts inside (their count, labels, and wrap designs are
+ * inner data, gated by the birthday lock exactly like the goodies — see boxes/[boxId]/contents). */
+export async function GET(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const resolved = await resolveRoomByToken(token);
   if (!resolved) return jsonError(404, "This link doesn't exist (or was typed wrong).");
@@ -21,8 +25,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
   const boxes = await prisma.box.findMany({
     where: { roomId: resolved.room.id },
     orderBy: { createdAt: 'asc' },
-    select: { id: true, fromName: true, designJson: true, posX: true, posY: true, z: true, createdAt: true, openedAt: true },
+    select: {
+      id: true, fromName: true, designJson: true, posX: true, posY: true, z: true, scale: true,
+      createdBySessionHash: true, createdAt: true, openedAt: true,
+    },
   });
+  const sessionHash = sessionHashFrom(req);
 
   return NextResponse.json({
     boxes: boxes.map((b) => ({
@@ -32,6 +40,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
       x: b.posX,
       y: b.posY,
       z: b.z,
+      scale: b.scale,
+      // A display hint only (does this browser get move/resize controls) — PATCH re-checks the
+      // real rule. The hash itself never leaves the server.
+      mine: resolved.role === 'admin' || (Boolean(sessionHash) && b.createdBySessionHash === sessionHash),
       placedAt: b.createdAt,
       opened: b.openedAt !== null,
     })),
@@ -56,7 +68,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     return jsonError(400, 'design, x, and y are required.');
   }
 
-  const rawGoodies = Array.isArray(body.goodies) ? body.goodies : [];
+  // Two wire shapes: the original flat `goodies` list (a single-gift box — also what every older
+  // client and test sends), or `gifts` for a box holding several separately wrapped gifts. A flat
+  // list is just one default gift with no wrap design of its own.
+  let giftInputs: GiftInput[];
+  if (body.gifts !== undefined) {
+    const parsedGifts = parseGiftInputs(body.gifts);
+    if (!parsedGifts.ok) return jsonError(400, parsedGifts.error);
+    giftInputs = parsedGifts.gifts;
+  } else {
+    giftInputs = [{ label: '', design: {}, goodies: Array.isArray(body.goodies) ? body.goodies : [] }];
+  }
+  const rawGoodies = giftInputs.flatMap((g) => g.goodies);
+  // Per-box goodie and byte limits apply to the box TOTAL across all its gifts, not per gift.
   if (rawGoodies.length > LIMITS.maxGoodiesPerBox) {
     return jsonError(400, `Keep it to ${LIMITS.maxGoodiesPerBox} goodies.`);
   }
@@ -64,7 +88,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   // Validate every payload server-side against its type's schema — never trust the client shape.
   const validated: Array<{ sizeBytes: number; payload: Record<string, unknown> }> = [];
   for (const raw of rawGoodies) {
-    const { sizeBytes, ...rest } = raw ?? {};
+    const { sizeBytes, ...rest } = (raw ?? {}) as Record<string, unknown>;
     const parsed = GoodiePayloadSchema.safeParse(rest);
     if (!parsed.success) {
       return jsonError(400, `Invalid ${rest?.type ?? 'goodie'}: ${parsed.error.issues[0]?.message ?? 'invalid payload'}`);
@@ -121,26 +145,45 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   }
 
   const deleteToken = generateToken();
+  const sessionHash = sessionHashFrom(req);
 
-  const box = await prisma.box.create({
-    data: {
-      roomId: resolved.room.id,
-      fromName: body.fromName.trim().slice(0, 80),
-      designJson: JSON.stringify(body.design),
-      posX: body.x,
-      posY: body.y,
-      deleteTokenHash: hashToken(deleteToken),
-      goodies: {
-        create: validated.map((g, i) => ({
-          type: g.payload.type as string,
-          sortOrder: i,
-          payloadJson: JSON.stringify(g.payload),
-          sizeBytes: g.sizeBytes,
-        })),
+  const boxId = await prisma.$transaction(async (tx) => {
+    const box = await tx.box.create({
+      data: {
+        roomId: resolved.room.id,
+        fromName: body.fromName.trim().slice(0, 80),
+        designJson: JSON.stringify(body.design),
+        posX: body.x,
+        posY: body.y,
+        openInOrder: giftInputs.length > 1 && body.openInOrder === true,
+        createdBySessionHash: sessionHash ?? null,
+        deleteTokenHash: hashToken(deleteToken),
+        assets: { create: assetRows },
       },
-      assets: { create: assetRows },
-    },
+    });
+    // Goodies keep ONE box-wide sortOrder (gift 1's goodies, then gift 2's, ...) so every existing
+    // reader that just orders a box's goodies — the flat `goodies` list the contents route still
+    // returns, the static export — keeps working unchanged.
+    let next = 0;
+    for (const [i, g] of giftInputs.entries()) {
+      const gift = await tx.gift.create({
+        data: { boxId: box.id, sortOrder: i, label: g.label, designJson: JSON.stringify(g.design) },
+      });
+      const mine = validated.slice(next, next + g.goodies.length);
+      await tx.goodie.createMany({
+        data: mine.map((v, j) => ({
+          boxId: box.id,
+          giftId: gift.id,
+          type: v.payload.type as string,
+          sortOrder: next + j,
+          payloadJson: JSON.stringify(v.payload),
+          sizeBytes: v.sizeBytes,
+        })),
+      });
+      next += g.goodies.length;
+    }
+    return box.id;
   });
 
-  return NextResponse.json({ id: box.id, deleteToken });
+  return NextResponse.json({ id: boxId, deleteToken });
 }

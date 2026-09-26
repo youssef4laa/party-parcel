@@ -2,13 +2,14 @@
 
 import { useState } from 'react';
 import { catalogEntriesFor, type CatalogCategory } from '@/room/objectCatalog';
-import type { CustomItemApi, RoomObjectApi, RoomObjectPatch, RoomPermissions } from '@/room/api';
+import type { CustomItemApi, PresentPatch, RoomObjectApi, RoomObjectPatch, RoomPermissions } from '@/room/api';
+import type { PlacedBox } from '@/contribute/types';
 import { LIMITS } from '@/config/limits';
 import CakeEditor from './CakeEditor';
 import DrawImportTab from './DrawImportTab';
 import MyItems from './MyItems';
 
-type Tab = 'items' | 'draw' | 'layers' | 'permissions';
+type Tab = 'items' | 'draw' | 'layers' | 'presents' | 'permissions';
 
 const CATEGORIES: { key: CatalogCategory; label: string }[] = [
   { key: 'furniture', label: 'Furniture' },
@@ -41,6 +42,11 @@ export default function EditPanel({
   onReplaceCustomItem,
   onDeleteCustomItem,
   onPlaceCustomItem,
+  presents,
+  selectedPresentId,
+  onSelectPresent,
+  onUpdatePresent,
+  canMovePresent,
 }: {
   capabilities: string[];
   objects: RoomObjectApi[];
@@ -63,8 +69,18 @@ export default function EditPanel({
   onReplaceCustomItem: (itemId: string, png: Blob, opts: { source: 'import' | 'drawing'; name: string }) => Promise<CustomItemApi>;
   onDeleteCustomItem: (itemId: string) => Promise<void>;
   onPlaceCustomItem: (item: CustomItemApi) => void;
+  /** Placed presents and their move/resize controls (docs/ROOM_EDITOR.md Phase 4a). */
+  presents: PlacedBox[];
+  selectedPresentId: string | null;
+  onSelectPresent: (id: string | null) => void;
+  onUpdatePresent: (patch: PresentPatch) => void;
+  /** Display hint for whether THIS browser may move a given present (the server re-checks). */
+  canMovePresent: (box: PlacedBox) => boolean;
 }) {
-  const [tab, setTab] = useState<Tab>('items');
+  // Someone who may only move presents (no room-object rights) gets just the Presents tab — the
+  // catalog, library and layers would be buttons that the server refuses.
+  const canEditObjects = capabilities.includes('objects:edit-mode');
+  const [tab, setTab] = useState<Tab>(capabilities.includes('objects:edit-mode') ? 'items' : 'presents');
   const [category, setCategory] = useState<CatalogCategory | undefined>(undefined);
   const [search, setSearch] = useState('');
   const entries = catalogEntriesFor(category, search);
@@ -80,14 +96,21 @@ export default function EditPanel({
       </div>
 
       <div className="flex gap-1 border-b-2 border-[#e0b8c8] p-2">
-        <button type="button" className={tabButtonClass(tab === 'items')} onClick={() => setTab('items')}>
-          Items
-        </button>
-        <button type="button" className={tabButtonClass(tab === 'draw')} onClick={() => setTab('draw')}>
-          Draw & Import
-        </button>
-        <button type="button" className={tabButtonClass(tab === 'layers')} onClick={() => setTab('layers')}>
-          Layers
+        {canEditObjects && (
+          <>
+            <button type="button" className={tabButtonClass(tab === 'items')} onClick={() => setTab('items')}>
+              Items
+            </button>
+            <button type="button" className={tabButtonClass(tab === 'draw')} onClick={() => setTab('draw')}>
+              Draw & Import
+            </button>
+            <button type="button" className={tabButtonClass(tab === 'layers')} onClick={() => setTab('layers')}>
+              Layers
+            </button>
+          </>
+        )}
+        <button type="button" className={tabButtonClass(tab === 'presents')} onClick={() => setTab('presents')}>
+          Presents
         </button>
         {isHost && (
           <button type="button" className={tabButtonClass(tab === 'permissions')} onClick={() => setTab('permissions')}>
@@ -97,7 +120,7 @@ export default function EditPanel({
       </div>
 
       <div className="flex-1 overflow-auto p-3">
-        {tab === 'items' && (
+        {tab === 'items' && canEditObjects && (
           <div className="flex flex-col gap-3">
             {selected && (
               <SelectedItemToolbar
@@ -158,7 +181,7 @@ export default function EditPanel({
           </div>
         )}
 
-        {tab === 'draw' && (
+        {tab === 'draw' && canEditObjects && (
           <DrawImportTab
             capabilities={capabilities}
             items={customItems}
@@ -170,7 +193,17 @@ export default function EditPanel({
           />
         )}
 
-        {tab === 'layers' && (
+        {tab === 'presents' && (
+          <PresentsTab
+            presents={presents}
+            selectedId={selectedPresentId}
+            onSelect={onSelectPresent}
+            onUpdate={onUpdatePresent}
+            canMove={canMovePresent}
+          />
+        )}
+
+        {tab === 'layers' && canEditObjects && (
           <LayersList objects={objects} selectedId={selectedId} onSelect={onSelect} onUpdate={onUpdateSelected} customItems={customItems} />
         )}
 
@@ -182,11 +215,88 @@ export default function EditPanel({
         )}
       </div>
 
-      {!capabilities.includes('objects:edit-mode') && (
+      {!capabilities.includes('objects:edit-mode') && !capabilities.some((c) => c.startsWith('presents:move')) && (
         <p className="border-t-2 border-[#e0b8c8] p-2 font-mono text-xs text-[#5e3620]/70">
           You&apos;re viewing edit mode read-only — the host hasn&apos;t given this link decorating rights.
         </p>
       )}
+    </div>
+  );
+}
+
+function PresentsTab({
+  presents,
+  selectedId,
+  onSelect,
+  onUpdate,
+  canMove,
+}: {
+  presents: PlacedBox[];
+  selectedId: string | null;
+  onSelect: (id: string | null) => void;
+  onUpdate: (patch: PresentPatch) => void;
+  canMove: (box: PlacedBox) => boolean;
+}) {
+  const step = 0.25;
+  const selected = presents.find((p) => p.id === selectedId) ?? null;
+  const movable = selected ? canMove(selected) : false;
+  const scale = selected?.scale ?? 1;
+  const z = selected?.z ?? 0;
+  const btn = 'border-2 border-[#5e3620] bg-[#fff6d5] px-2 py-1 font-mono text-xs text-[#5e3620] disabled:opacity-40';
+
+  return (
+    <div className="flex flex-col gap-3" data-testid="presents-tab">
+      <p className="font-mono text-xs text-[#5e3620]/70">
+        Drag a present in the room to move it, or pick one here. Only its position, size, and stacking
+        can change — what&apos;s inside stays sealed.
+      </p>
+
+      {selected && (
+        <div className="flex flex-col gap-2 border-2 border-[#ff3d8b] bg-white p-2" data-testid="present-toolbar">
+          <div className="flex items-center justify-between">
+            <span className="font-mono text-xs uppercase text-[#5e3620]/70">Present from {selected.fromName}</span>
+            <button type="button" onClick={() => onSelect(null)} className="font-mono text-xs text-[#5e3620]">
+              deselect
+            </button>
+          </div>
+          <p className="font-mono text-xs text-[#5e3620]" data-testid="present-readout">
+            size {selected.design.size ?? 'M'} · scale {scale}× · layer {z}
+          </p>
+          {!movable && <p className="font-mono text-xs text-[#d1266a]">This present isn&apos;t yours to move.</p>}
+          <div className="flex flex-wrap gap-1">
+            <button type="button" className={btn} disabled={!movable || scale <= LIMITS.minPresentScale} onClick={() => onUpdate({ scale: scale - step })}>
+              Scale −
+            </button>
+            <button type="button" className={btn} disabled={!movable || scale >= LIMITS.maxPresentScale} onClick={() => onUpdate({ scale: scale + step })}>
+              Scale +
+            </button>
+            <button type="button" className={btn} disabled={!movable} onClick={() => onUpdate({ z: z + 1 })}>
+              Forward
+            </button>
+            <button type="button" className={btn} disabled={!movable || z <= 0} onClick={() => onUpdate({ z: Math.max(0, z - 1) })}>
+              Backward
+            </button>
+          </div>
+        </div>
+      )}
+
+      <ul className="flex flex-col gap-1">
+        {presents.map((p) => (
+          <li key={p.id}>
+            <button
+              type="button"
+              onClick={() => onSelect(p.id)}
+              className={`w-full border-2 px-2 py-1 text-left font-mono text-xs ${
+                selectedId === p.id ? 'border-[#ff3d8b] text-[#ff3d8b]' : 'border-[#e0b8c8] text-[#5e3620]'
+              }`}
+            >
+              🎁 From {p.fromName}
+              {!canMove(p) && <span className="opacity-60"> (locked)</span>}
+            </button>
+          </li>
+        ))}
+        {presents.length === 0 && <li className="font-mono text-sm italic text-[#5e3620]/60">No presents yet.</li>}
+      </ul>
     </div>
   );
 }

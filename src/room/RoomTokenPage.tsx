@@ -11,6 +11,7 @@ import type { RoomCanvasHandle } from './RoomCanvas';
 import type { PlacedBox } from '@/contribute/types';
 import BoxOpenAnimation from '@/box/BoxOpenAnimation';
 import GoodieUnwrapFlow from '@/goodies/GoodieUnwrapFlow';
+import GiftsFlow from '@/goodies/GiftsFlow';
 import type { BoxContents } from './api';
 
 export default function RoomTokenPage({ token }: { token: string }) {
@@ -61,6 +62,12 @@ export default function RoomTokenPage({ token }: { token: string }) {
     },
     [room, token],
   );
+
+  const finishOpening = useCallback(() => {
+    if (openBox) handleRef.current?.markBoxOpened(openBox.boxId);
+    setUnwrapping(false);
+    setOpenBox(null);
+  }, [openBox]);
 
   if (status === 'loading') {
     return <div className="h-full w-full bg-[#0d0d1f]" />;
@@ -114,17 +121,25 @@ export default function RoomTokenPage({ token }: { token: string }) {
         />
       )}
 
-      {openBox && unwrapping && (
+      {/* Several gifts: they float out of the box and open one at a time. One gift (every box that
+          existed before gifts, and any new single-gift box) skips that step entirely. */}
+      {openBox && unwrapping && openBox.contents.gifts.length > 1 && (
+        <GiftsFlow
+          gifts={openBox.contents.gifts}
+          boxId={openBox.boxId}
+          celebrateToken={token}
+          fromName={openBox.contents.fromName}
+          openInOrder={openBox.contents.openInOrder}
+          onDone={finishOpening}
+        />
+      )}
+      {openBox && unwrapping && openBox.contents.gifts.length <= 1 && (
         <GoodieUnwrapFlow
           goodies={openBox.contents.goodies}
           boxId={openBox.boxId}
           celebrateToken={token}
           fromName={openBox.contents.fromName}
-          onDone={() => {
-            handleRef.current?.markBoxOpened(openBox.boxId);
-            setUnwrapping(false);
-            setOpenBox(null);
-          }}
+          onDone={finishOpening}
         />
       )}
     </div>

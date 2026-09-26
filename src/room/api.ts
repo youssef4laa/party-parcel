@@ -1,4 +1,5 @@
 import type { BoxContribution, PlacedBox } from '@/contribute/types';
+import { getOrCreateSessionToken } from './contributorSession';
 import type { BoxDesign } from '@/box/types';
 
 export type RoomInfo = {
@@ -49,7 +50,9 @@ export async function fetchRoom(token: string) {
 }
 
 export async function fetchBoxes(token: string) {
-  const res = await fetch(`/api/rooms/${token}/boxes`);
+  // The session header is how the server tells this browser which presents it packed ("mine") —
+  // see contributorSession.ts; it only ever leaves the browser hashed.
+  const res = await fetch(`/api/rooms/${token}/boxes`, { headers: { 'X-Contributor-Session': getOrCreateSessionToken(token) } });
   const data = await asJson<{ boxes: PlacedBoxApi[] }>(res);
   return data.boxes;
 }
@@ -61,27 +64,49 @@ export type PlacedBoxApi = {
   x: number;
   y: number;
   z: number;
+  scale: number;
+  mine: boolean;
   placedAt: string;
   opened: boolean;
 };
 
+function goodiesWire(goodies: BoxContribution['goodies']) {
+  return goodies.map((g) => {
+    const wire: Record<string, unknown> = { ...g };
+    delete wire.id;
+    return wire;
+  });
+}
+
 export async function createBox(token: string, contribution: BoxContribution, x: number, y: number) {
+  // A multi-gift box sends `gifts` (each with its own wrap + goodies); a single-gift box keeps the
+  // original flat `goodies` shape, byte-for-byte what it always sent.
+  const contents =
+    contribution.gifts && contribution.gifts.length > 1
+      ? {
+          gifts: contribution.gifts.map((g) => ({ label: g.label, design: g.design, goodies: goodiesWire(g.goodies) })),
+          openInOrder: contribution.openInOrder === true,
+        }
+      : { goodies: goodiesWire(contribution.goodies) };
   const res = await fetch(`/api/rooms/${token}/boxes`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      fromName: contribution.fromName,
-      design: contribution.design,
-      x,
-      y,
-      goodies: contribution.goodies.map((g) => {
-        const wire: Record<string, unknown> = { ...g };
-        delete wire.id;
-        return wire;
-      }),
-    }),
+    headers: { 'Content-Type': 'application/json', 'X-Contributor-Session': getOrCreateSessionToken(token) },
+    body: JSON.stringify({ fromName: contribution.fromName, design: contribution.design, x, y, ...contents }),
   });
   return asJson<{ id: string; deleteToken: string }>(res);
+}
+
+export type PresentPatch = Partial<{ x: number; y: number; z: number; scale: number }>;
+
+/** Move/resize/reorder a placed present. `deleteToken` is the fallback ownership proof for the
+ * present's packer when their session was cleared (see UpdatePresentSchema). */
+export async function updateBox(token: string, boxId: string, patch: PresentPatch, deleteToken?: string) {
+  const res = await fetch(`/api/rooms/${token}/boxes/${boxId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'X-Contributor-Session': getOrCreateSessionToken(token) },
+    body: JSON.stringify(deleteToken ? { ...patch, deleteToken } : patch),
+  });
+  return asJson<{ box: { id: string; x: number; y: number; z: number; scale: number } }>(res);
 }
 
 export async function deleteBox(token: string, boxId: string, deleteToken?: string) {
@@ -136,12 +161,25 @@ export async function uploadFile(token: string, file: File, kind: UploadKind = '
   return asJson<{ assetKey: string; mime: string; size: number; sha256: string }>(final);
 }
 
+export type ContentsGoodie = Record<string, unknown> & {
+  id: string;
+  type: string;
+  sortOrder: number;
+  assetUrls: string[];
+  redeemedAt: string | null;
+};
+
+export type ContentsGift = { id: string; label: string; design: Partial<BoxDesign>; sortOrder: number; goodies: ContentsGoodie[] };
+
 export type BoxContents = {
   fromName: string;
   design: BoxDesign;
-  goodies: Array<
-    Record<string, unknown> & { id: string; type: string; sortOrder: number; assetUrls: string[]; redeemedAt: string | null }
-  >;
+  /** Phase 4b: the recipient must open the inner gifts in order. */
+  openInOrder: boolean;
+  /** Every goodie in the box, flat and in order (what single-gift boxes have always used). */
+  goodies: ContentsGoodie[];
+  /** The same goodies grouped by the gift they're wrapped in; a single-gift box has exactly one. */
+  gifts: ContentsGift[];
 };
 
 export async function fetchBoxContents(boxId: string, celebrateToken: string) {
@@ -194,6 +232,9 @@ export function toPlacedBox(b: PlacedBoxApi): PlacedBox {
     y: b.y,
     placedAt: Date.parse(b.placedAt),
     opened: b.opened,
+    scale: b.scale,
+    z: b.z,
+    mine: b.mine,
   };
 }
 
