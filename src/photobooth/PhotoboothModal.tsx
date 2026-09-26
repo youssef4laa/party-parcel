@@ -8,7 +8,7 @@ type Stage = 'start' | 'live' | 'countdown' | 'review' | 'upload-fallback';
  * Section 3: a modal in a red-curtain frame with a yellow border. Live webcam preview only
  * starts after an explicit click (never on mount), a 3-2-1 countdown, a flash, and an upload
  * fallback if the camera is denied. Deliberately its own bespoke chrome rather than reusing the
- * generic cream `Modal` — the brief calls for a visually distinct "photobooth" look.
+ * generic cream `Modal` — the photobooth is meant to look visually distinct.
  */
 export default function PhotoboothModal({
   onCapture,

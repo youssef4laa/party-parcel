@@ -1,4 +1,4 @@
-/** Shared palette for procedural room art. Keep it warm/cozy/night-time per the brief. */
+/** Shared palette for procedural room art. Keep it warm, cozy and night-time. */
 export const palette = {
   wallPlaster: '#e8c9a0',
   wallPlasterShade: '#d9b688',

@@ -1,4 +1,4 @@
-// Party Parcel data model (section 10 of the brief).
+// Party Parcel data model.
 // Dev datasource is SQLite for a zero-setup `npm run dev`.
 // Swapping to Postgres for production is a datasource + DATABASE_URL change only —
 // nothing here uses SQLite- or Postgres-only features (notably: no native `enum`, since D1's

@@ -12,7 +12,7 @@ export function textureForDesign(design: BoxDesign, mode: 'closed' | 'open' = 'c
 }
 
 /** A present's on-screen size in world px: the fixed base footprint, times the design's own S/M/L
- * size, times its placement scale (docs/ROOM_EDITOR.md Phase 4a). Size M at scale 1 is exactly the
+ * size, times its placement scale. Size M at scale 1 is exactly the
  * original 64px, so presents placed before either existed look identical. */
 export function boxWorldSize(design: BoxDesign, scale = 1) {
   return BOX_WORLD_SIZE * sizeFactorOf(design) * scale;

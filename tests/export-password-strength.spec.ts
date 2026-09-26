@@ -6,7 +6,7 @@ import { test, expect } from '@playwright/test';
 import { seedRoom, tokenFromLink } from './helpers';
 
 /** Gift-readiness pass: `npm run export:gift` must refuse a weak password outright rather than
- * silently accepting the brief's old "8 characters" floor — see scripts/lib/passwordStrength.ts. */
+ * silently accepting the original 8-character floor — see scripts/lib/passwordStrength.ts. */
 test.describe('export CLI: weak password rejection', () => {
   let admin: string;
   const outDirs: string[] = [];

@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { seedRoom, tokenFromLink } from './helpers';
 
 /**
- * Room Editor Phase 2 (docs/ROOM_EDITOR.md): "Blow-out-and-relight works for every style." Every
+ * Room Editor Phase 2: "Blow-out-and-relight works for every style." Every
  * style shares the same click-to-toggle interaction (scene/interactions/cake.ts's attachCake) —
  * what differs per style is only the texture attachCake asks for (scene/objectSprites.ts's
  * cakeTextureFor) — so this proves the *interaction* survives every one of the 8 styles, rather

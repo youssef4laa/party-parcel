@@ -89,7 +89,7 @@ export function canMutateObjects(input: {
 }
 
 /**
- * Who may move/resize/reorder a placed present (docs/ROOM_EDITOR.md Phase 4a): the host always; a
+ * Who may move/resize/reorder a placed present: the host always; a
  * contributor only for a present they packed and only when the host turned on `canMoveOwnPresents`;
  * never the celebrant (they open presents, they don't rearrange them — `canRearrange` covers room
  * objects only); nobody but the host while the layout is frozen. Only position, scale, and z ever
@@ -107,8 +107,7 @@ export type CustomItemAction = 'create' | 'update' | 'delete';
 export type CustomItemSource = 'import' | 'drawing';
 
 /**
- * Who may add to, edit, or remove from a room's "My items" library (docs/ROOM_EDITOR.md Phase 3:
- * "Custom items obey canImport/canDraw. The owner or host can delete an item"). Separate from
+ * Who may add to, edit, or remove from a room's "My items" library. Separate from
  * `canMutateObjects` on purpose: adding art to the library is not the same act as placing it in
  * the room (that still goes through the object routes and `canDecorate`). Like the object rule,
  * this is the real boundary — every custom-item route calls it, whatever the UI shows.

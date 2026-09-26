@@ -7,8 +7,8 @@ import { getStorageProvider } from '@/server/storage';
 
 /** "Shot owners can delete their own shot" — the delete token itself is the authorization, the
  * same no-accounts pattern a box's contributor delete token uses. Any role holding the right
- * token can delete; there's no separate host-moderation override here (the brief's "Report"
- * control in section 12 is scoped to boxes, not photobooth shots). */
+ * token can delete; there's no separate host-moderation override here (a "Report" control
+ * exists only for boxes, not photobooth shots). */
 export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ token: string; shotId: string }> },

@@ -6,7 +6,7 @@ import { showLabel } from './label';
 /** Click extinguishes the candles with a smoke puff + "make a wish" bubble; click again relights.
  * `textureFor(lit)` re-derives the cake's own texture for the given lit state from whatever
  * style/config this particular cake has (see scene/objectSprites.ts's cakeTextureFor) — this is
- * what makes blow-out/relight work uniformly across every cake style (docs/ROOM_EDITOR.md Phase 2),
+ * what makes blow-out/relight work uniformly across every cake style,
  * not just the original fixed tiered-cake look. */
 export function attachCake(
   cake: Sprite,

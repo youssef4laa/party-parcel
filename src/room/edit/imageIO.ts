@@ -1,7 +1,7 @@
 /**
  * Browser-only glue between files/URLs/canvases and pixelOps.ts's plain Bitmaps. Every import is
  * decoded to raw pixels and re-encoded as a fresh PNG through a canvas, which is what strips
- * EXIF/ICC/text metadata (docs/ROOM_EDITOR.md 3a: "Re-encode and strip metadata in the browser");
+ * EXIF/ICC/text metadata;
  * the server validates and rewrites again regardless (src/server/customItemImage.ts), so this is
  * the friendly first pass, not the security boundary.
  */

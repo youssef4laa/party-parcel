@@ -3,7 +3,7 @@ import { LIMITS } from '@/config/limits';
 import { ROOM_HEIGHT, ROOM_WIDTH } from '@/room/constants';
 
 /**
- * A placed present's editable fields (docs/ROOM_EDITOR.md Phase 4a): position, scale, and z —
+ * A placed present's editable fields: position, scale, and z —
  * nothing else. `.strict()` is what makes "contents stay sealed" a property of the schema rather
  * than of the route: a body that also tries to send goodies, fromName, design, openInOrder, or
  * anything else is refused outright, not silently ignored.

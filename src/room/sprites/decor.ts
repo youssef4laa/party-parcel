@@ -2,7 +2,7 @@ import { createPixelCanvas, fitPixelFont } from '../draw/pixelCanvas';
 import { palette as p } from '../draw/palette';
 
 /**
- * Room Editor catalog (docs/ROOM_EDITOR.md 1c) — new procedural placeholder sprites, kept simple
+ * Room Editor catalog — new procedural placeholder sprites, kept simple
  * and blocky to match the existing style. Each draw function is self-contained, `unit = 4` like every
  * other sprite in this project, registered by catalog key in scene/objectSprites.ts.
  */

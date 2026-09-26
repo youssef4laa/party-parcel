@@ -28,7 +28,7 @@ export default function GoodieShelf({
   onRemove: (id: string) => void;
   onReorder: (id: string, dir: -1 | 1) => void;
   /** The goodie count for the WHOLE box when this shelf is one gift among several — the per-box
-   * limit applies to the total, not to each gift (docs/ROOM_EDITOR.md 4b). */
+   * limit applies to the total, not to each gift. */
   boxGoodieCount?: number;
 }) {
   const [editing, setEditing] = useState<{ type: GoodieType; item?: GoodieItem } | null>(null);

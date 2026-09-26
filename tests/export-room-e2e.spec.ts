@@ -10,7 +10,7 @@ import type { StaticManifest, StaticBoxSecret } from '../src/export/manifest';
 import { decodePng, makePng, marginedSquare } from './customItemFixtures';
 
 /**
- * Room Editor Phase 5 (docs/ROOM_EDITOR.md): "export end to end". Builds two REAL exports with the
+ * Room Editor Phase 5: "export end to end". Builds two REAL exports with the
  * real CLI — an edited room and an untouched baseline — and checks, in order:
  *   1. the files (what got baked, what must not be there, what is encrypted),
  *   2. the rendered site (the edits are really on screen, there is no edit mode, the cake still

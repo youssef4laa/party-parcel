@@ -1,8 +1,8 @@
 /**
  * The full registry of placeable room object kinds — metadata only (no canvas/Pixi here, so this
  * module is safe to import server-side for validation too). Actual procedural sprites live in
- * scene/objectSprites.ts (client-only). The catalog implements the items named in
- * docs/ROOM_EDITOR.md's section 1c.
+ * scene/objectSprites.ts (client-only). The catalog covers furniture, plants, lights and
+ * party decor.
  */
 export type RoomZone = 'floor' | 'wall' | 'ceiling' | 'tabletop' | 'anywhere';
 export const ROOM_ZONES: RoomZone[] = ['floor', 'wall', 'ceiling', 'tabletop', 'anywhere'];
@@ -25,7 +25,7 @@ export type CatalogEntry = {
 };
 
 const catalog: CatalogEntry[] = [
-  // --- Legacy scene elements — "every existing element" from docs/ROOM_EDITOR.md 1a, now
+  // --- Legacy scene elements — every element of the original room, now
   // data-driven RoomObjects instead of hardcoded scene-builder code. Hidden from the "add new
   // item" catalog since a fresh room already has one of each (see defaultLayout.ts) — a host who
   // deletes one can still bring it back via "Reset to default layout".

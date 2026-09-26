@@ -21,7 +21,7 @@ async function toScreen(page: Page, box: { x: number; y: number; height: number 
 /**
  * Room Editor Phase 1b, standing test (c): "after moving a converted element, its interaction
  * still works (move the cake, click it, candles go out)." This is the one legacy-element
- * conversion the brief calls out as load-bearing for Phase 2, so it gets an end-to-end browser
+ * conversion that is load-bearing for the cake options, so it gets an end-to-end browser
  * test, not just an API-level check — the whole point is that the *click target* has to follow
  * the sprite after a real drag, which only a real pointer gesture against the actual canvas can
  * prove.

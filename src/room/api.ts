@@ -238,7 +238,7 @@ export function toPlacedBox(b: PlacedBoxApi): PlacedBox {
   };
 }
 
-// --- Room Editor (docs/ROOM_EDITOR.md) ---
+// --- Room Editor ---
 
 export type RoomObjectApi = {
   id: string;
@@ -356,7 +356,7 @@ export async function updateRoomPermissions(token: string, permissions: RoomPerm
   return data.permissions;
 }
 
-// --- Custom items: the room's "My items" library (docs/ROOM_EDITOR.md Phase 3) ---
+// --- Custom items: the room's "My items" library ---
 
 export type CustomItemApi = {
   id: string;

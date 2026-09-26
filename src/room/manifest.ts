@@ -74,7 +74,7 @@ const registry: Record<string, DrawFn> = {
   meowBubble: drawMeowBubble,
   balloonPop: drawBalloonPop,
 
-  // Room Editor catalog (docs/ROOM_EDITOR.md 1c) — new placeable items
+  // Room Editor catalog — new placeable items
   sofa: drawSofa,
   armchair: drawArmchair,
   bookshelf: drawBookshelf,

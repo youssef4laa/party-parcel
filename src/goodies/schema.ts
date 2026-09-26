@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * One zod schema per goodie type (section 5 of the brief), used to validate every payload
+ * One zod schema per goodie type, used to validate every payload
  * server-side (never trust the client) and shared with the client for inline form validation.
  * Every URL field is restricted to http/https — enforced here, not left to the renderer.
  */

@@ -51,7 +51,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
 
   const sessionHash = sessionHashFrom(req);
 
-  // Zones (docs/ROOM_EDITOR.md 1b): only the host may place an item outside its zone ("place
+  // Zones: only the host may place an item outside its zone ("place
   // anywhere"). For everyone else the item's zone is the catalog's, NOT whatever the request claims
   // — otherwise asking for zone "anywhere" would make the limit meaningless — and its position must
   // fall inside it.

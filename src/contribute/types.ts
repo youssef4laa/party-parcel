@@ -33,7 +33,7 @@ export const GOODIE_ICONS: Record<GoodieType, string> = {
  * id (for list operations) and a size estimate (for the live counters). */
 export type GoodieItem = { id: string; sizeBytes: number } & GoodiePayload;
 
-/** One separately wrapped gift inside a multi-gift box (docs/ROOM_EDITOR.md Phase 4b). */
+/** One separately wrapped gift inside a multi-gift box. */
 export type GiftContribution = { label: string; design: BoxDesign; goodies: GoodieItem[] };
 
 export type BoxContribution = {

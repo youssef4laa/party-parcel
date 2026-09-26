@@ -3,7 +3,7 @@ import { seedRoom, tokenFromLink } from './helpers';
 import { makePng } from './customItemFixtures';
 
 /**
- * Room Editor Phase 5 (docs/ROOM_EDITOR.md 1b): the edit-mode tools — move, resize (buttons, corner
+ * Room Editor Phase 5: the edit-mode tools — move, resize (buttons, corner
  * handles, touch pinch), undo/redo, keyboard, duplicate, snap-to-grid, and zones with the host's
  * "place anywhere". Everything is driven through real mouse/keyboard/touch input, and every claim
  * is checked against what the SERVER stored, not against what the editor's own UI says.

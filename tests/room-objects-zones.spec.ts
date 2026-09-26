@@ -3,7 +3,7 @@ import { seedRoom, tokenFromLink } from './helpers';
 import { makePng } from './customItemFixtures';
 
 /**
- * Room Editor Phase 5 (docs/ROOM_EDITOR.md 1b): "Each item has a zone ... that limits placement;
+ * Room Editor Phase 5: "Each item has a zone ... that limits placement;
  * the host can toggle place anywhere." The limit is enforced by the server for everyone but the host
  * — a zone the client alone respected would be decoration, not a rule.
  */

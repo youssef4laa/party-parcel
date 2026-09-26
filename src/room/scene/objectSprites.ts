@@ -16,7 +16,7 @@ const MANIFEST_KEY_OVERRIDE: Record<string, string> = {
   'cupcake-stand': 'cupcakeStand',
   'snack-bowl': 'snackBowl',
   // Defensive fallback only — dynamicTextureFor/cakeTextureFor below always handles 'cake' kind
-  // for real placed objects (docs/ROOM_EDITOR.md Phase 2). This key is only ever reached if a
+  // for real placed objects. This key is only ever reached if a
   // future call site looks up a cake texture through manifestKeyFor directly instead.
   cake: 'cakeLit',
   // Edit mode's static representation (EditableObjectsLayer) always shows the idle pose — the
@@ -99,7 +99,7 @@ export function dynamicTextureFor(kind: string, config: Record<string, unknown>,
   return null;
 }
 
-// --- Custom items (docs/ROOM_EDITOR.md Phase 3) ---
+// --- Custom items ---
 const customTextures = new Map<string, { url: string; texture: Texture }>();
 
 export function customTextureFor(assetId: string): Texture | null {

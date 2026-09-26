@@ -30,7 +30,7 @@ function saveOpened(boxId: string, opened: Set<string>) {
 type View = { kind: 'grid' } | { kind: 'gift'; id: string } | { kind: 'all' };
 
 /**
- * Multi-gift boxes (docs/ROOM_EDITOR.md Phase 4b): once the outer box is open, the inner gifts float
+ * Multi-gift boxes: once the outer box is open, the inner gifts float
  * out with their own wraps and labels; each opens to its goodies through the existing one-by-one /
  * all-at-once flow. Shows "N of M gifts opened" and an "Open everything" shortcut. With the box's
  * "open in order" setting on, only the next unopened gift can be opened. Single-gift boxes never

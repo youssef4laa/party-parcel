@@ -23,7 +23,7 @@ import {
 const DEBOUNCE_MS = 300;
 
 /**
- * The Cake section of the Items tab (docs/ROOM_EDITOR.md Phase 2) — the app's first configJson-
+ * The Cake section of the Items tab — the app's first configJson-
  * editing UI (every earlier `configurable: true` catalog entry had no editor at
  * all). Keeps its own local draft, like PermissionsForm's pattern (EditPanel.tsx), rather than
  * writing straight into the parent's `objects` state on every keystroke — the parent is only

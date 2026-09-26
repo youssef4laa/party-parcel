@@ -4,7 +4,7 @@ import { seedRoom, tokenFromLink } from './helpers';
 import { decodePng, makeJpeg, makePng, marginedSquare } from './customItemFixtures';
 
 /**
- * Room Editor Phase 3 (docs/ROOM_EDITOR.md 3a + 3b) through the real UI: import (with the notice,
+ * Room Editor Phase 3 through the real UI: import (with the notice,
  * auto-crop, pixelate + palette), draw with every tool, save/edit/place/delete, and touch. Whatever
  * a drawing tool did is verified by decoding the PNG the server actually stored — not by trusting
  * the UI's own preview.

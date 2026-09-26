@@ -1,8 +1,8 @@
 /**
- * Pure pixel-art operations for the Room Editor's import + draw tools (docs/ROOM_EDITOR.md
- * Phase 3). Everything here works on a plain `Bitmap` ({width, height, RGBA data}) — no canvas, no
+ * Pure pixel-art operations for the Room Editor's import + draw tools. Everything here works on a
+ * plain `Bitmap` ({width, height, RGBA data}) — no canvas, no
  * DOM — so the import pipeline and pixel editor share one tested implementation and the specs can
- * import it straight into Node. Scaling is ALWAYS nearest-neighbor (never bilinear), per the brief.
+ * import it straight into Node. Scaling is ALWAYS nearest-neighbor (never bilinear).
  */
 export type Bitmap = { width: number; height: number; data: Uint8ClampedArray };
 

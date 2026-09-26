@@ -2,8 +2,8 @@ import { createPixelCanvas } from '../draw/pixelCanvas';
 import { palette as p } from '../draw/palette';
 
 /**
- * The rest of the docs/ROOM_EDITOR.md 1c catalog (furniture, plants, lights, party decor): every
- * item the brief names that Phase 1 left out. Same conventions as decor.ts — procedural, blocky,
+ * The rest of the built-in catalog (furniture, plants, lights, party decor): every
+ * item beyond the first batch of catalog items. Same conventions as decor.ts — procedural, blocky,
  * `unit = 4` world px per art pixel, one self-contained draw function per item, registered by
  * catalog key in manifest.ts. Original art only.
  */

@@ -14,7 +14,7 @@ type EditorState = { bitmap: Bitmap; name: string; existing: CustomItemApi | nul
 const btn = (active = false) =>
   `border-2 px-2 py-1 font-mono text-xs ${active ? 'border-[#ff3d8b] bg-[#ff3d8b] text-[#fff6d5]' : 'border-[#5e3620] bg-[#fff6d5] text-[#5e3620]'} disabled:opacity-50`;
 
-/** The "Draw & Import" tab (docs/ROOM_EDITOR.md Phase 3): import a PNG/WebP, draw pixel art, and
+/** The "Draw & Import" tab: import a PNG/WebP, draw pixel art, and
  * manage the room's "My items" library. Which sections show follows the capabilities list — a
  * display hint only; the custom-items routes enforce canImport/canDraw themselves. */
 export default function DrawImportTab({

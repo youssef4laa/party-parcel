@@ -4,8 +4,7 @@ import type { PhotoboothShotView } from './dataSource';
 /**
  * Browser-only photobooth shots, stored as base64 data URLs in localStorage — never sent to any
  * server. Used by two places that have no backend to persist to: the "/" localStorage demo page
- * (`stubDataSource.ts`), and the static export (`StaticRoomApp.tsx`), per the export brief's
- * requirement that shots taken while viewing an exported room stay in that visitor's browser
+ * (`stubDataSource.ts`), and the static export (`StaticRoomApp.tsx`), so that shots taken while viewing an exported room stay in that visitor's browser
  * only. `ns` namespaces the storage key (room id for the demo page, a fixed key for the export).
  */
 function storageKey(ns: string) {

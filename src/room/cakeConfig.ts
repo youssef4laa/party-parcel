@@ -1,5 +1,5 @@
 /**
- * Cake config shape + defaults (docs/ROOM_EDITOR.md Phase 2) — a plain, framework-agnostic module
+ * Cake config shape + defaults — a plain, framework-agnostic module
  * (no Pixi/DOM/Prisma imports) so it's safe to import from both the server (defaultLayout.ts, for
  * the seeded default) and the client (the cake draw function, the Cake editor UI). Matches the
  * defensive-parse convention every other RoomObject `configJson` reader already follows (see
@@ -38,7 +38,7 @@ export const CAKE_TOPPERS: { key: CakeTopper; label: string }[] = [
   { key: 'sparkler', label: 'Sparkler' },
 ];
 
-/** "count" = small candles, one per candleCount (up to 10) — the brief's "count matching the
+/** "count" = small candles, one per candleCount (up to 10) — the "count matching the
  * age" option. "numbers" = the age's own digits rendered as candle-numerals. */
 export type CandleMode = 'count' | 'numbers' | 'sparklers' | 'none';
 

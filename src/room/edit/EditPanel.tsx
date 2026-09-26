@@ -79,22 +79,22 @@ export default function EditPanel({
   permissions: RoomPermissions | null;
   onSavePermissions: (p: RoomPermissions) => void;
   /** The celebrant's age, if known — only used to offer a "match age" shortcut in the Cake
-   * section's candle-count field (docs/ROOM_EDITOR.md Phase 2). */
+   * section's candle-count field. */
   age?: number;
-  /** The room's "My items" library (docs/ROOM_EDITOR.md Phase 3). */
+  /** The room's "My items" library. */
   customItems: CustomItemApi[];
   onCreateCustomItem: (png: Blob, opts: { source: 'import' | 'drawing'; name: string }) => Promise<CustomItemApi>;
   onReplaceCustomItem: (itemId: string, png: Blob, opts: { source: 'import' | 'drawing'; name: string }) => Promise<CustomItemApi>;
   onDeleteCustomItem: (itemId: string) => Promise<void>;
   onPlaceCustomItem: (item: CustomItemApi) => void;
-  /** Placed presents and their move/resize controls (docs/ROOM_EDITOR.md Phase 4a). */
+  /** Placed presents and their move/resize controls. */
   presents: PlacedBox[];
   selectedPresentId: string | null;
   onSelectPresent: (id: string | null) => void;
   onUpdatePresent: (patch: PresentPatch) => void;
   /** Display hint for whether THIS browser may move a given present (the server re-checks). */
   canMovePresent: (box: PlacedBox) => boolean;
-  /** Undo/redo of every edit made in this session (docs/ROOM_EDITOR.md 1b). */
+  /** Undo/redo of every edit made in this session. */
   canUndo: boolean;
   canRedo: boolean;
   onUndo: () => void;

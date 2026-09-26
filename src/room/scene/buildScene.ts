@@ -18,7 +18,7 @@ export type SceneCallbacks = {
   onOpenPhotobooth: () => void;
   reducedMotion: boolean;
   /**
-   * Room Editor (docs/ROOM_EDITOR.md 1a): every legacy scene element (window, banner, garlands,
+   * Room Editor: every legacy scene element (window, banner, garlands,
    * cake, cat, ...) is now a real RoomObject row, and this is the *interactive, animated* render
    * of them — position/scale/rotation/flip all come from here, a hidden row is skipped entirely,
    * and each row gets its own sprite + interaction attached at ITS OWN position (so a click target

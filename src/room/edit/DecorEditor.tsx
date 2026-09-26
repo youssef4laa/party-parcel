@@ -17,8 +17,7 @@ const FIELD = 'border-2 border-[#e0b8c8] bg-white px-2 py-1 font-mono text-sm te
 
 /**
  * Edits the one setting each configurable decoration has: a neon sign's or banner's words, or a
- * balloon's colour (docs/ROOM_EDITOR.md 1c: "neon sign with custom text", "extra banners with custom
- * text"). Before this, those configJson fields could only be set through the API. Same shape as
+ * balloon's colour. Before this, those configJson fields could only be set through the API. Same shape as
  * CakeEditor: a local draft, a debounced save, and `key={item.id}` at the call site so selecting a
  * different item re-initializes it.
  */

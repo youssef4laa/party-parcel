@@ -14,7 +14,7 @@ export type BowStyle = 'none' | 'classic' | 'big' | 'double' | 'ruffle' | 'knot'
 export type TagShape = 'none' | 'heart' | 'star' | 'round';
 export type StickerShape = 'none' | 'heart' | 'star' | 'sparkle' | 'paw';
 export type TopperShape = 'none' | 'flower' | 'leaf' | 'candle';
-/** How big the present sits in the room before any placement scaling (docs/ROOM_EDITOR.md 4a). */
+/** How big the present sits in the room before any placement scaling. */
 export type BoxSize = 'S' | 'M' | 'L';
 
 /** World-size multiplier per BoxSize. M is exactly the original fixed 64px footprint, so every

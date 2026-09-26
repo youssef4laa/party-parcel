@@ -2,10 +2,10 @@ import { FLOOR_TOP, ROOM_HEIGHT, ROOM_WIDTH, TABLE_TEX_W, TABLE_X, TABLE_Y, WAIN
 import type { RoomZone } from './objectCatalog';
 
 /**
- * Where each placement zone allows an object's anchor point to be (docs/ROOM_EDITOR.md 1b: "Each
- * item has a zone (floor, wall, ceiling, tabletop, anywhere) that limits placement; the host can
- * toggle 'place anywhere'"). Framework-agnostic, so the server enforces exactly the rule the editor
- * clamps to. Bounds are deliberately generous — they exist to stop a rug on the ceiling or a
+ * Where each placement zone allows an object's anchor point to be. Each item has a zone (floor,
+ * wall, ceiling, tabletop, anywhere) that limits where it can be placed, and the host can switch on
+ * "place anywhere" to ignore it. This module is framework-agnostic, so the server enforces exactly
+ * the rule the editor clamps to. Bounds are deliberately generous — they exist to stop a rug on the ceiling or a
  * chandelier on the floor, not to police pixel positions — and every position in the default
  * layout must satisfy them (tests/room-zones.spec.ts proves that against the real seed).
  */

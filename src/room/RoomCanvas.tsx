@@ -69,7 +69,7 @@ export type RoomCanvasProps = {
   /** Filled in once the scene is ready with a small imperative API (currently just
    * `markBoxOpened`) — a plain ref prop, simpler than forwarding a ref through the dynamic-import loader. */
   handleRef?: React.RefObject<RoomCanvasHandle | null>;
-  /** The static export's baked layout (docs/ROOM_EDITOR.md Phase 5). Only used when there is no
+  /** The static export's baked layout. Only used when there is no
    * `roomToken` (i.e. no server): the read-only exported site renders exactly the objects the host
    * left in the room instead of the default layout. Must be a stable reference (memoize it) — a new
    * array identity rebuilds the whole scene. */
@@ -146,7 +146,7 @@ export default function RoomCanvas({
   const [viewingShot, setViewingShot] = useState<PhotoboothShotView | null>(null);
   const shotsRef = useRef<PhotoboothShotView[]>([]);
 
-  // --- Room Editor state (docs/ROOM_EDITOR.md) — only meaningful with a real roomToken ---
+  // --- Room Editor state — only meaningful with a real roomToken ---
   const [objects, setObjects] = useState<RoomObjectApi[]>([]);
   const objectsRef = useRef<RoomObjectApi[]>([]);
   const [editMode, setEditMode] = useState(false);
@@ -159,7 +159,7 @@ export default function RoomCanvas({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [permissions, setPermissions] = useState<RoomPermissions | null>(null);
   const [customItems, setCustomItems] = useState<CustomItemApi[]>([]);
-  // Placed presents (docs/ROOM_EDITOR.md Phase 4a): the live placement data (position, scale, z, and
+  // Placed presents: the live placement data (position, scale, z, and
   // whether this browser may move it) behind each sprite, mirrored into state for the edit panel.
   const presentsRef = useRef<Map<string, PlacedBox>>(new Map());
   const outlinesRef = useRef<Map<string, Graphics>>(new Map());
@@ -179,7 +179,7 @@ export default function RoomCanvas({
   const [sessionToken] = useState<string | undefined>(() => (roomToken ? getOrCreateSessionToken(roomToken) : undefined));
   const editModeRef = useRef(editMode);
   const selectedIdRef = useRef(selectedId);
-  // Editing preferences (docs/ROOM_EDITOR.md 1b): snap-to-grid, free-scale (default off: integer scale
+  // Editing preferences: snap-to-grid, free-scale (default off: integer scale
   // steps so pixels stay crisp), and — host only — "place anywhere", which lifts the zone limit.
   const [snapOn, setSnapOn] = useState(false);
   const [freeScale, setFreeScale] = useState(false);
@@ -502,9 +502,8 @@ export default function RoomCanvas({
         objects: initialObjects,
       });
 
-      // The photo-print wall isn't a catalog/RoomObject item (docs/ROOM_EDITOR.md never mentions
-      // it) — it's always-present infrastructure beside the camera prop, so it's built once here,
-      // independent of the legacy-scene rebuild cycle, and never torn down until unmount.
+      // The photo-print wall isn't a catalog/RoomObject item — it's always-present infrastructure
+      // beside the camera prop, so it's built once here, independent of the legacy-scene rebuild cycle, and never torn down until unmount.
       photoWallInstance = new PhotoWall(world, 610, 90, (shot) => setViewingShot(shot));
 
       const placement = attachPlacement(application, camera);
@@ -634,7 +633,7 @@ export default function RoomCanvas({
     [roomToken, addObject],
   );
 
-  // --- Custom items: the room's "My items" library (docs/ROOM_EDITOR.md Phase 3) ---
+  // --- Custom items: the room's "My items" library ---
   // These throw on failure instead of setting `editError`: the Draw & Import tab shows the message
   // next to the control that caused it (a too-big file, a full library), not in a global toast.
 
@@ -780,7 +779,7 @@ export default function RoomCanvas({
     if (copy) setSelectedId(copy.id);
   }, [roomToken, selectedId, duplicateObject, constrainPosition]);
 
-  // --- Keyboard (docs/ROOM_EDITOR.md 1b): arrows nudge, Delete, Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z ---
+  // --- Keyboard: arrows nudge, Delete, Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z ---
   // Nudging shows the new position immediately but only SAVES after a short pause, so holding an
   // arrow key is one edit (one undo step, one request) rather than dozens that would trip the rate limit.
   const nudgeRef = useRef<{
@@ -986,7 +985,7 @@ export default function RoomCanvas({
         </button>
       )}
 
-      {/* Room Editor (docs/ROOM_EDITOR.md 1b): rendered only when the room payload's
+      {/* Room Editor: rendered only when the room payload's
           capabilities list grants it — but this is a display hint, never the actual boundary;
           every mutation route re-checks the real rule independently regardless of whether this
           button is even shown. */}

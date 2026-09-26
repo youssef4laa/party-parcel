@@ -5,7 +5,7 @@ import { seedRoom, tokenFromLink, uploadPhoto, parseAssetUrl } from './helpers';
 import { LIMITS } from '../src/config/limits';
 
 /**
- * Room Editor Phase 4b (docs/ROOM_EDITOR.md): a box can hold several separately wrapped gifts.
+ * Room Editor Phase 4b: a box can hold several separately wrapped gifts.
  * Covers the wire shape, backward compatibility (a flat `goodies` box is one default gift), the
  * limits (MAX_GIFTS_PER_BOX, per-box goodie and byte totals across gifts), and — the important one —
  * that inner-gift data (labels, wrap designs, goodies, media) is gated by the birthday lock exactly

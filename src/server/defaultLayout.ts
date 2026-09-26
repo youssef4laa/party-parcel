@@ -28,7 +28,7 @@ const GARLAND_TEX_W = 60 * 4;
  * can move, resize, hide, or delete.
  *
  * `age` (the room's own celebrant age, when known) sets the seeded cake's default candle count —
- * "count matching the age (up to 10 small candles)" per docs/ROOM_EDITOR.md Phase 2. Callers with
+ * "count matching the age (up to 10 small candles)". Callers with
  * no room to read an age from (the demo sandbox, a fresh reset with age unavailable) can omit it
  * and get DEFAULT_CAKE_CONFIG's own fallback count instead.
  */

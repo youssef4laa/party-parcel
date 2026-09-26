@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { seedRoom, tokenFromLink } from './helpers';
 
 /**
- * Room Editor (docs/ROOM_EDITOR.md, Phase 1) permission matrix. Every one of these has to hold
+ * Room Editor permission matrix. Every one of these has to hold
  * as a server-side rule, independent of what the UI shows — the pencil icon is hidden from a
  * role/room state that lacks 'objects:edit-mode' in its capabilities list, but that's a display
  * hint only (see src/server/permissions.ts's doc comment and src/room/api.ts's RoomInfo.capabilities

@@ -6,7 +6,7 @@ import { validateCustomItemImage } from '../src/server/customItemImage';
 import { decodePng, makeJpeg, makePng, makeWebp, makeWebpWithExif, marginedSquare, withTextChunk } from './customItemFixtures';
 
 /**
- * Room Editor Phase 3 (docs/ROOM_EDITOR.md 3a): the server is the real boundary for custom items —
+ * Room Editor Phase 3: the server is the real boundary for custom items —
  * magic-byte sniffing, size and dimension limits, the 40-item library cap, canImport/canDraw, and
  * owner-or-host deletion that takes placed copies with it. Every denial below is a real request
  * that the server refuses, not a UI check.

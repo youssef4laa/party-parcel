@@ -5,7 +5,7 @@
  * inlines these textually at build time for the client bundle, so a dynamic/computed lookup
  * would silently come back `undefined` in the browser.
  *
- * The brief's original numbers (50 goodies / 500 MB per box) are what we recommend for a paid
+ * 50 goodies / 500 MB per box is what we recommend for a paid
  * host tier; these are the free-tier defaults actually enforced out of the box.
  */
 function positiveInt(raw: string | undefined, fallback: number): number {
@@ -28,7 +28,7 @@ export const LIMITS = {
   maxVideoUploadBytes: positiveInt(process.env.NEXT_PUBLIC_MAX_VIDEO_UPLOAD_BYTES, 20 * MB),
   maxVoiceSeconds: positiveInt(process.env.NEXT_PUBLIC_MAX_VOICE_SECONDS, 180),
 
-  // Room Editor (docs/ROOM_EDITOR.md) — all new limits are env vars with defaults, per that brief.
+  // Room Editor — all new limits are env vars with defaults.
   maxObjectsPerRoom: positiveInt(process.env.NEXT_PUBLIC_MAX_OBJECTS_PER_ROOM, 300),
   defaultMaxItemsPerContributor: positiveInt(process.env.NEXT_PUBLIC_MAX_ITEMS_PER_CONTRIBUTOR, 10),
   minObjectScale: positiveFloat(process.env.NEXT_PUBLIC_MIN_OBJECT_SCALE, 0.25),
@@ -41,7 +41,7 @@ export const LIMITS = {
   maxGiftsPerBox: positiveInt(process.env.NEXT_PUBLIC_MAX_GIFTS_PER_BOX, 6),
 } as const;
 
-/** The brief's own numbers — shown in the UI/docs as "what a paid host tier gets." */
+/** 50 goodies / 500 MB per box — shown in the UI/docs as "what a paid host tier gets." */
 export const RECOMMENDED_PAID_TIER = {
   maxGoodiesPerBox: 50,
   maxBytesPerBox: 500 * MB,

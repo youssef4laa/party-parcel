@@ -4,7 +4,7 @@ import { OBJECT_CATALOG, catalogEntriesFor } from '../src/room/objectCatalog';
 import { LIGHT_GLOWS } from '../src/room/scene/lightGlow';
 
 /**
- * Room Editor Phase 5 (docs/ROOM_EDITOR.md 1c): the built-in catalog is complete, every item really
+ * Room Editor Phase 5: the built-in catalog is complete, every item really
  * renders, lights glow with the right z-order, and the banner/neon/balloon settings are editable.
  */
 
@@ -12,8 +12,8 @@ const ROOM_HEIGHT = 760;
 let ipCounter = 0;
 const ip = () => ({ 'X-Forwarded-For': `10.5.${Math.floor(++ipCounter / 250)}.${ipCounter % 250}` });
 
-// Every item the brief's section 1c names, by the catalog key that implements it.
-const BRIEF_1C = {
+// Every item the catalog is meant to offer, by the key that implements it.
+const CATALOG_GROUPS = {
   furniture: ['sofa', 'armchair', 'bookshelf', 'side-table', 'dresser', 'bench', 'chair', 'bean-bag', 'cushions', 'rug'],
   plants: ['potted-plant', 'tall-tree', 'pine-tree', 'palm', 'flower-pots', 'hanging-plant'],
   lights: ['string-lights', 'paper-lantern-decor', 'floor-lamp', 'table-lamp', 'neon-sign', 'disco-ball', 'candles', 'spotlight'],
@@ -24,8 +24,8 @@ const NEW_KINDS = [
   'hanging-plant', 'candles', 'spotlight', 'banner-text', 'confetti', 'poster', 'poster-cake', 'photo-string',
 ];
 
-test('every item the brief names in 1c is in the catalog the host can add from (or is the legacy kind it maps to)', () => {
-  for (const [group, keys] of Object.entries(BRIEF_1C)) {
+test('every item the catalog is meant to offer is in the catalog the host can add from (or is the legacy kind it maps to)', () => {
+  for (const [group, keys] of Object.entries(CATALOG_GROUPS)) {
     for (const key of keys) {
       const entry = OBJECT_CATALOG[key];
       expect(entry, `${group}: "${key}" must exist`).toBeDefined();
@@ -36,8 +36,8 @@ test('every item the brief names in 1c is in the catalog the host can add from (
   // rugs come in several sizes AND patterns
   const rugs = catalogEntriesFor(undefined, 'rug').map((e) => e.key);
   expect(rugs.length).toBeGreaterThanOrEqual(5);
-  // the four categories the panel filters by all have the items the brief lists
-  for (const [category, keys] of Object.entries(BRIEF_1C)) {
+  // the four categories the panel filters by all have their items
+  for (const [category, keys] of Object.entries(CATALOG_GROUPS)) {
     const listed = new Set(catalogEntriesFor(category === 'furniture' ? 'furniture' : (category as 'plants' | 'lights' | 'decor')).map((e) => e.key));
     for (const key of keys) expect(listed.has(key), `${key} should appear under "${category}"`).toBe(true);
   }

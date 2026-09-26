@@ -98,7 +98,7 @@ export class EditableObjectsLayer {
   }
 
   /** `interactive` is whether nodes are selectable/draggable — it defaults to `editMode`, but differs
-   * for someone in edit mode who may move presents and NOT room objects (docs/ROOM_EDITOR.md 4a):
+   * for someone in edit mode who may move presents and NOT room objects:
    * they still see the edit-mode render, they just can't grab anything in it.
    *
    * In view mode, legacy kinds are excluded — buildScene.ts renders those instead, with their
@@ -126,7 +126,7 @@ export class EditableObjectsLayer {
         // A kind whose look depends on its own configJson (cake, banner, neon-sign, balloon — see
         // dynamicTextureFor) needs its sprite's texture rebuilt when THAT changes — buildNode only
         // ever runs once per object id, so without this, editing a placed cake's style/text/colors
-        // (docs/ROOM_EDITOR.md Phase 2's Cake editor) would silently do nothing to the actual
+        // would silently do nothing to the actual
         // in-room sprite until edit mode was toggled off and back on. Position/scale/rotation
         // already refresh every call via applyTransform below; this is the one thing that didn't.
         if (state.obj.configJson !== obj.configJson) {
@@ -354,9 +354,8 @@ export class EditableObjectsLayer {
   }
 
   /**
-   * Two-finger pinch resizes the SELECTED object (docs/ROOM_EDITOR.md 1b: touch — drag, pinch to
-   * resize). Listens on the canvas element directly for touch pointers only, so mouse behavior is
-   * untouched; the camera's one-finger pan is suspended for the gesture and any half-started drag
+   * Two-finger pinch resizes the SELECTED object. Listens on the canvas element directly for touch
+   * pointers only, so mouse behavior is untouched; the camera's one-finger pan is suspended for the gesture and any half-started drag
    * of an object (the first finger usually lands on it) is cancelled.
    */
   enablePinch(canvas: HTMLCanvasElement) {

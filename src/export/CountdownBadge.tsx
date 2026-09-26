@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 
-/** Decoration only — see the brief: "the password is the real lock." This never gates anything. */
+/** Decoration only: the password is the real lock. This never gates anything. */
 export default function CountdownBadge({ eventAt }: { eventAt: string }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {

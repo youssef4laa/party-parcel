@@ -1,5 +1,5 @@
 /**
- * Server-side validation for Room Editor custom items (docs/ROOM_EDITOR.md Phase 3a): PNG and WebP
+ * Server-side validation for Room Editor custom items: PNG and WebP
  * only, sniffed from magic bytes (never the filename or the client's Content-Type), with the real
  * pixel dimensions read from the file's own header. Pure functions over a Buffer — no Prisma, no
  * storage — so tests can exercise the exact bytes-in/verdict-out logic directly.

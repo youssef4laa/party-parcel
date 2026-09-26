@@ -21,7 +21,7 @@ function bytesOf(text: string) {
   return new Blob([text]).size;
 }
 
-/** One gift while it's being packed (docs/ROOM_EDITOR.md Phase 4b). Gift 1 is the box's original
+/** One gift while it's being packed. Gift 1 is the box's original
  * contents: the letter and pictures fields below belong to it, exactly as before gifts existed. */
 type GiftDraft = { id: string; label: string; design: BoxDesign; goodies: GoodieItem[] };
 

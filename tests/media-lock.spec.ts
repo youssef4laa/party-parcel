@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { createBoxWithPhoto, parseAssetUrl, seedRoom, signAssetUrl, tokenFromLink } from './helpers';
 
 /**
- * Part A, item 3 of the Milestone 5 brief: the media lock. A box's goodie contents (and the
+ * The media lock. A box's goodie contents (and the
  * signed media URLs inside them) must only ever be handed out to a valid celebrate token AND
  * only once the server's own clock says the room is unlocked — never client time, never any
  * other token.

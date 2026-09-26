@@ -17,7 +17,7 @@ export type StaticManifest = {
     occasion: string;
   };
   boxes: StaticBoxMeta[];
-  /** The room's decoration layout, baked (docs/ROOM_EDITOR.md Phase 5): every visible object's
+  /** The room's decoration layout, baked: every visible object's
    * position, scale, layer, flip and rotation, plus per-kind config (cake style/text/candles,
    * banner and neon-sign text, balloon color). Decorations are deliberately PLAINTEXT — they are
    * the room, and the import notice already tells people that. Optional so an export made before
@@ -68,7 +68,7 @@ export type StaticBoxMeta = {
   y: number;
   placedAt: string;
   goodiesFile: string;
-  /** Present placement (docs/ROOM_EDITOR.md Phase 4a). Optional: older exports omit them (1 / 0). */
+  /** Present placement. Optional: older exports omit them (1 / 0). */
   scale?: number;
   z?: number;
 };

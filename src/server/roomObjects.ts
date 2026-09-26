@@ -45,8 +45,7 @@ export type UpdateObjectInput = z.infer<typeof UpdateObjectSchema>;
 
 /**
  * Returns a room's placed objects, lazily seeding the default layout the first time anyone asks
- * (covers both brand-new rooms and pre-existing rooms migrated before this feature existed — see
- * docs/ROOM_EDITOR.md 1a). Wrapped in a transaction so two near-simultaneous first loads can't
+ * (covers both brand-new rooms and pre-existing rooms migrated before this feature existed). Wrapped in a transaction so two near-simultaneous first loads can't
  * double-seed — SQLite serializes writers, so this is enough for this app's traffic level.
  */
 export async function resolveRoomObjects(roomId: string, age?: number | null) {

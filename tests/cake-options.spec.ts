@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { seedRoom, tokenFromLink } from './helpers';
 
 /**
- * Room Editor Phase 2 (docs/ROOM_EDITOR.md) — API-level coverage for the cake's configJson: the
+ * Room Editor Phase 2 — API-level coverage for the cake's configJson: the
  * default candle count seeded from the room's age, that the Cake editor's PATCH channel (same
  * generic `updateRoomObject` every other configurable item uses) actually persists, that it's
  * gated by the same permission matrix as any other object update (nothing cake-specific bypasses

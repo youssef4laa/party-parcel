@@ -20,8 +20,7 @@ give away.
   server needed.
 
 **[docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md)** explains how it all fits together — the data model, how
-the birthday lock is enforced, the room, permissions, and the sealed export — and how to extend it. The
-original build brief is in [docs/brief.md](docs/brief.md).
+the birthday lock is enforced, the room, permissions, and the sealed export — and how to extend it.
 
 > **Status.** The room, presents, locking, decorating and export all work and are covered by an
 > end-to-end test suite. What's *not* built yet: a host sign-up/payment flow (you create rooms from the
@@ -104,7 +103,7 @@ backdoor in a real deployment. The response includes three links:
 ### 2. Share the right link with the right people
 
 Each link is a random, unguessable token — nobody needs an account, and the app never shows one
-role how to reach another (see section 2 of the brief for the full reasoning):
+role how to reach another:
 
 - **Admin link** — keep this one for yourself (the host). Opens a small panel over the room to
   unlock early, remove a box, or see who has placed one (name and time only — never contents).
@@ -199,7 +198,7 @@ not read at runtime.
 | `NEXT_PUBLIC_MAX_CUSTOM_ITEMS_PER_ROOM` | 40 | images in "My items" |
 | `NEXT_PUBLIC_MAX_GIFTS_PER_BOX` | 6 | separately wrapped gifts in one box |
 
-The brief's own numbers (50 goodies / 500 MB per box) are the "paid tier" reference —
+50 goodies / 500 MB per box is the "paid tier" reference —
 `RECOMMENDED_PAID_TIER` in `src/config/limits.ts` — raise the env vars to those, or higher, for a
 bigger room.
 

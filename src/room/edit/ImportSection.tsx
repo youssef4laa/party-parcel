@@ -5,7 +5,7 @@ import { LIMITS } from '@/config/limits';
 import { autoCrop, countColors, pixelate, type Bitmap } from '../pixelOps';
 import { bitmapToCanvas, bitmapToPngBlob, loadImportFile, type LoadedImport } from './imageIO';
 
-/** Shown on every import, verbatim from docs/ROOM_EDITOR.md 3a — the export leaves custom PNGs as
+/** Shown on every import, the export leaves custom PNGs as
  * plaintext assets, so anyone with the room link (or the exported site) can see them. */
 export const IMPORT_NOTICE =
   "Decorations are visible to anyone with the room link, even before the password in the exported site. Don't import private photos here.";

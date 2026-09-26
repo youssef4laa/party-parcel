@@ -4,7 +4,7 @@ import { palette as p } from '../draw/palette';
 import { DEFAULT_CAKE_CONFIG, CAKE_TEXT_MAX_LEN, type CakeConfig, type CakeStyle, type CakeTopper } from '../cakeConfig';
 
 /**
- * Cake rendering (docs/ROOM_EDITOR.md Phase 2). `drawCake(lit, config)` draws the cake exactly as
+ * Cake rendering. `drawCake(lit, config)` draws the cake exactly as
  * its RoomObject's configJson describes it — style, colors, topper, text plaque, and candles — and
  * `lit` toggles flame vs. smoke-wisp on every candle style, so blow-out/relight (scene/interactions/
  * cake.ts) works uniformly no matter which style is selected (see scene/objectSprites.ts's

@@ -4,7 +4,7 @@ import { useCallback, useRef, useState, type RefObject } from 'react';
 import { createRoomObject, deleteRoomObject, updateRoomObject, type RoomObjectApi, type RoomObjectPatch } from '../api';
 
 /**
- * Undo/redo for room-object edits (docs/ROOM_EDITOR.md 1b: "undo/redo"). Every edit the panel or the
+ * Undo/redo for room-object edits. Every edit the panel or the
  * canvas makes goes through here, so each one is (1) sent to the server, which stays the only
  * authority on whether it's allowed, and (2) if it succeeded, recorded as a pair of "how to take it
  * back" / "how to do it again" functions. Undoing replays those against the SERVER too — it is a

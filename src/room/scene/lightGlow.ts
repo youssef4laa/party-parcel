@@ -1,7 +1,7 @@
 import { Sprite, Texture } from 'pixi.js';
 
 /**
- * Lights cast a soft additive glow that respects z-order (docs/ROOM_EDITOR.md 1c). The glow is a
+ * Lights cast a soft additive glow that respects z-order. The glow is a
  * CHILD of its light's own node, so it inherits that node's position, scale, rotation, flip AND
  * zIndex — a lamp standing behind a sofa is drawn behind it, glow included, instead of the halo
  * floating over everything. The blend mode is additive, so it brightens what's behind it (the wall,

@@ -171,7 +171,7 @@ export type BoxDesignerProps = {
   onChange?: (design: BoxDesign) => void;
   onSave?: (design: BoxDesign) => void;
   saveLabel?: string;
-  /** Inner-gift mode (docs/ROOM_EDITOR.md 4b "compact wrap design"): a smaller stacked layout, no
+  /** Inner-gift mode: a smaller stacked layout, no
    * export button, and no size row — S/M/L belongs to the outer box that sits in the room. */
   compact?: boolean;
 };

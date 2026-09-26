@@ -61,7 +61,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   const bytes = await storage.get(assetKey);
   if (!bytes) return jsonError(400, "That photo wasn't found (the upload may have expired).");
 
-  // The caption is always server-generated, never taken from the client, per the brief's fixed
+  // The caption is always server-generated, never taken from the client: it has a fixed
   // "HAPPY BIRTHDAY · {date} · {name}" format — nothing for a sender to type or spoof here.
   const caption = formatPhotoboothCaption(resolved.room.celebrantName);
   const deleteToken = generateToken();

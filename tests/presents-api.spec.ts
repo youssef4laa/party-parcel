@@ -4,7 +4,7 @@ import { LIMITS } from '../src/config/limits';
 import { BOX_SIZE_FACTOR, sizeFactorOf } from '../src/box/types';
 
 /**
- * Room Editor Phase 4a (docs/ROOM_EDITOR.md): placed presents get move + resize + stacking, gated
+ * Room Editor Phase 4a: placed presents get move + resize + stacking, gated
  * by canMoveOwnPresents or host. Only position, scale, and z may change; contents stay sealed and
  * the birthday lock is untouched. Every denial here is a real request the server refuses.
  */

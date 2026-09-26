@@ -10,7 +10,7 @@ import { UpdatePresentSchema } from '@/server/boxes';
 import { sessionHashFrom } from '@/server/customItems';
 
 /**
- * Move, resize, or reorder a placed present (docs/ROOM_EDITOR.md Phase 4a). Only x/y/z/scale can
+ * Move, resize, or reorder a placed present. Only x/y/z/scale can
  * change — the schema is strict, so a body that also carries contents or a design is refused — and
  * nothing here reads or writes a goodie, so the contents stay sealed and the birthday lock is
  * untouched by construction.

@@ -20,7 +20,7 @@ const PermissionsSchema = z.object({
   freezeLayout: z.boolean(),
 });
 
-/** Host-only, both directions — the Permissions tab (docs/ROOM_EDITOR.md 1d) is explicitly
+/** Host-only, both directions — the Permissions tab is explicitly
  * host-only in the UI, and this route is where that's actually enforced. */
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
