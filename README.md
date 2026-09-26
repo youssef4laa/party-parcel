@@ -46,6 +46,8 @@ Env vars are documented inline in `.env.example`: database URL, storage provider
 ## Tests
 
 ```bash
+npm run typecheck   # type-check (generates Next's route types first — needed on a fresh clone)
+npm run lint
 npm run test:e2e
 ```
 
