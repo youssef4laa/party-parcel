@@ -2,9 +2,9 @@
  * The exported room self-hosts its two pixel fonts instead of loading them from Google Fonts —
  * the export is meant to work fully offline/standalone, and section 12's "no third-party
  * trackers" spirit extends to not phoning home just to render text. Font files (woff2) and their
- * required OFL license text live in export-site/src/fonts/ and public/fonts-license/ — see
- * DECISIONS.md for the license check and scope notes (only the latin + latin-ext subsets are
- * bundled, not the full multi-script set Google Fonts serves).
+ * required OFL license text live in export-site/src/fonts/ and public/fonts-license/. The OFL permits
+ * self-hosting; only the latin + latin-ext subsets are bundled, not the full multi-script set
+ * Google Fonts serves.
  *
  * Press Start 2P (c) 2012 The Press Start 2P Project Authors — SIL OFL 1.1.
  * VT323 (c) 2011 The VT323 Project Authors — SIL OFL 1.1.

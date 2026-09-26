@@ -15,7 +15,7 @@ import type { StorageProvider } from './types';
  *
  * NOT exercised against a real bucket in this environment (no credentials available) — the SDK
  * calls are standard presigned-URL usage, but this file is implemented-and-reviewed, not
- * integration-tested. See DECISIONS.md.
+ * integration-tested.
  */
 function client() {
   const endpoint = process.env.S3_ENDPOINT;

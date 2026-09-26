@@ -19,8 +19,9 @@ give away.
 - **Sealed export**: a folder (or one-click `.zip`) you can host anywhere, locked with a password, no
   server needed.
 
-See [docs/brief.md](docs/brief.md) for the original brief, [DECISIONS.md](DECISIONS.md) for the reasoning
-behind every choice, and [HANDOFF.md](HANDOFF.md) for the current status and known gaps.
+**[docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md)** explains how it all fits together — the data model, how
+the birthday lock is enforced, the room, permissions, and the sealed export — and how to extend it. The
+original build brief is in [docs/brief.md](docs/brief.md).
 
 > **Status.** The room, presents, locking, decorating and export all work and are covered by an
 > end-to-end test suite. What's *not* built yet: a host sign-up/payment flow (you create rooms from the
@@ -56,7 +57,7 @@ Pack → Seal → Lock → Unlock → Unwrap flow for all ten goodie types, thro
 (`tests/goodies-e2e.spec.ts`). `npx playwright test --project=safari` runs the camera/microphone
 tests again under real WebKit; `npx playwright test --project=mobile tests/phone.spec.ts` runs the
 touch-specific pan/drag tests. Both need `npx playwright install webkit` first (one-time, not part
-of the default `npm install` — see [HANDOFF.md](HANDOFF.md) if that step is unfamiliar).
+of the default `npm install`).
 
 The Room Editor has its own specs: permissions and zones (`room-objects-*.spec.ts`,
 `room-zones.spec.ts`), the edit tools with real mouse, keyboard and touch input
@@ -71,8 +72,8 @@ real bugs. Wait for one to finish before starting another.
 
 ## Creating a room and adding friends' content
 
-There's no host sign-up UI yet (that's Milestone 7 — see [HANDOFF.md](HANDOFF.md) for what's
-still ahead). Until then, this is how to actually run a party with what's built:
+There's no host sign-up UI yet (it's on the roadmap — see
+[docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md#14-not-built-yet)). Until then, this is how to actually run a party with what's built:
 
 ### 1. Create the room
 
@@ -134,7 +135,7 @@ keepsake — see "Filling the room" and "Static export" below.
 The exact sequence for actually running a party with what's built so far, start to finish.
 
 1. **Create the room and set the event date.** The event date can only be set at creation time —
-   there's no edit-room UI yet (Milestone 7, see [HANDOFF.md](HANDOFF.md)). Decide the real
+   there's no edit-room UI yet (it's on the roadmap). Decide the real
    date/time up front:
    ```bash
    curl -X POST http://localhost:3000/api/dev/seed-room \
@@ -391,7 +392,7 @@ Pages.
 This is a standard Next.js app with a SQLite database (Prisma) and local-disk or S3/R2 storage — see
 `.env.example`. Set a strong `ASSET_SIGNING_SECRET`. The `/api/dev/seed-room` helper is disabled when
 `NODE_ENV=production`, so a real deployment needs its own way of creating rooms (the host sign-up flow
-is the next milestone — see [HANDOFF.md](HANDOFF.md)). Room links are unguessable bearer tokens: anyone
+is the next planned piece). Room links are unguessable bearer tokens: anyone
 who has one has that link's rights, so treat them like passwords.
 
 ## License
@@ -406,4 +407,4 @@ under the SIL Open Font License; their license text ships in the export's `fonts
 
 This project is built with Next.js (App Router) + TypeScript + Tailwind, PixiJS for the room
 scene, Prisma for the data layer, and a separate Vite bundle (`export-site/`) for the static
-export above. See [DECISIONS.md](DECISIONS.md) for the reasoning behind each of these choices.
+export above. See [docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md) for how these fit together.

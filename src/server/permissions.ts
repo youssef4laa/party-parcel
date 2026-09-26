@@ -138,8 +138,8 @@ export function canManageCustomItems(input: {
  * A display hint only — the room payload's `capabilities` list, used to decide whether to show
  * the pencil icon and which tools/tabs to offer. Never the actual authorization boundary: every
  * mutation route re-checks `canMutateObjects` (and ownership, and freeze, and unlock) on its own,
- * so hiding the pencil in the UI is never what actually stops an unauthorized edit — see the
- * permissions tests in DECISIONS.md's Room Editor entry.
+ * so hiding the pencil in the UI is never what actually stops an unauthorized edit — the
+ * permissions tests (tests/room-objects-permissions.spec.ts) prove it.
  */
 export function computeCapabilities(role: RoomRole, permissions: RoomPermissions, unlocked: boolean): string[] {
   const caps: string[] = [];

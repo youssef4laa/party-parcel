@@ -32,7 +32,7 @@ async function listFilesRecursive(dir: string): Promise<string[]> {
  * field (goodie contents, sender name, tag text) must be unreadable anywhere in an exported
  * bundle's files without the password. Runs the real `scripts/export-gift.ts` CLI end to end (no
  * mocking) and inspects the actual files it writes — same method used to find and verify the fix
- * for the fromName/tagText leak (see DECISIONS.md's Milestone 6 gift-readiness entry).
+ * for the fromName/tagText leak.
  */
 test.describe('static export: no plaintext leaks', () => {
   let admin: string;

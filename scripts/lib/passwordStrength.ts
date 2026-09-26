@@ -1,6 +1,6 @@
 /**
  * A minimum bar for the export password — the *only* real lock on an exported gift folder (see
- * scripts/export-gift.ts and DECISIONS.md). Simple length/entropy heuristic rather than a
+ * scripts/export-gift.ts). Simple length/entropy heuristic rather than a
  * dependency like zxcvbn: this is a one-off local CLI check for a single-user threat model (a
  * friend or family member guessing at a shared link), not a general-purpose account system, and
  * a small heuristic is easy to read, test, and reason about without adding a ~800KB dependency to

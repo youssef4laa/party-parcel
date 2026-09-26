@@ -1,7 +1,7 @@
 /**
  * Object storage behind an interface (mirrors the `PaymentProvider` pattern from section 9),
  * so the dev-friendly local disk implementation can be swapped for a real S3/R2 one in
- * production without touching call sites. See `local.ts`, `s3.ts`, and DECISIONS.md.
+ * production without touching call sites. See `local.ts` and `s3.ts`.
  *
  * Uploads are a two-phase presigned dance, the same shape for every provider:
  *   1. `createUploadTarget` — server issues a short-lived, size/type-bounded PUT URL for a

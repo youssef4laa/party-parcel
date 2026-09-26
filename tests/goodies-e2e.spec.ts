@@ -136,9 +136,8 @@ test.describe.serial('all ten goodie types, sealed and unwrapped', () => {
     // wait for that to finish, so under real system load it can land on an empty div and silently
     // do nothing (no error, box just never opens). Waiting for the pan-hint text first (same
     // pattern as phone.spec.ts) guarantees the scene, and therefore the box sprite, actually
-    // exists before the click fires. See DECISIONS.md for the isolated repro proving this (not
-    // shared test-DB/upload state, not test ordering, not date-relative fixtures) and confirming
-    // the fix.
+    // exists before the click fires. (An isolated repro ruled out shared test-DB/upload state, test
+    // ordering and date-relative fixtures: the race was purely a missing readiness wait.)
     await expect(page.getByText(/Drag, scroll, or use/)).toBeVisible();
     // The box settles at its snapped floor position (anchored bottom-center) — click near that
     // anchor point, not the spot originally clicked during placement (see helpers.ts comment).

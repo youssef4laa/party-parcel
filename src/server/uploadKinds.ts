@@ -13,7 +13,7 @@ export const UPLOAD_KINDS: Record<'photo' | 'drawing' | 'video' | 'voice' | 'son
   video: { types: ALLOWED_VIDEO_TYPES, maxBytes: LIMITS.maxVideoUploadBytes },
   // Voice is duration-capped client-side (MAX_VOICE_SECONDS); this is the defense-in-depth byte
   // ceiling in case that's bypassed. Not separately specified, so reusing the video cap is the
-  // simplest reasonable choice — see DECISIONS.md.
+  // simplest reasonable choice.
   voice: { types: ALLOWED_AUDIO_TYPES, maxBytes: LIMITS.maxVideoUploadBytes },
   song: { types: ALLOWED_AUDIO_TYPES, maxBytes: LIMITS.maxVideoUploadBytes },
 };

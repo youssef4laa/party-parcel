@@ -22,7 +22,7 @@ const GARLAND_TEX_W = 60 * 4;
 
 /**
  * Positions copied directly from the previous hardcoded scene builder (src/room/scene/
- * buildScene.ts, before this migration) — see DECISIONS.md's Room Editor entry. A fresh room
+ * buildScene.ts, before this migration). A fresh room
  * (or an existing room with zero RoomObject rows — see resolveRoomObjects()) gets exactly this
  * set, so the default look is unchanged; every value here is now just a starting point the host
  * can move, resize, hide, or delete.
@@ -99,7 +99,7 @@ export function defaultLayout(age?: number | null): DefaultLayoutItem[] {
   );
 
   // Matches the original CatController's fixed spawn point ((MIN_X+MAX_X)/2, FLOOR_TOP+34) —
-  // now just this row's starting x/y instead of a hardcoded constant (see DECISIONS.md: an
+  // now just this row's starting x/y instead of a hardcoded constant (an
   // autonomous wanderer can't sensibly track a stored position every frame, but it spawns from
   // and keeps roaming around wherever this is).
   items.push({ kind: 'cat', x: 1180, y: 634, z: 0, zone: 'floor' });

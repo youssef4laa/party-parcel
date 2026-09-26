@@ -87,7 +87,7 @@ export default function RoomTokenPage({ token }: { token: string }) {
         canContribute={role === 'contribute'}
         // Always passed (not just for the contribute role): photobooth is a normal room
         // interaction open to admin/contribute/celebrate alike, unlike packing a box, which the
-        // "+" button UI already restricts to canContribute — see DECISIONS.md.
+        // "+" button UI already restricts to canContribute.
         roomToken={token}
         capabilities={room.capabilities}
         isHost={role === 'admin'}

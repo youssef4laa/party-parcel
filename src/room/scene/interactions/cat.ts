@@ -31,7 +31,7 @@ export class CatController {
    * `spawn` is the RoomObject row's own x/y/scale (docs/ROOM_EDITOR.md 1a's "at least make
    * position, scale, and hide work" escape hatch — a fully autonomous wanderer can't sensibly
    * *track* a stored position frame-by-frame, but it starts from wherever it was dropped and
-   * keeps roaming the same room-wide corridor from there; see DECISIONS.md).
+   * keeps roaming the same room-wide corridor from there).
    */
   constructor(
     private world: Container,

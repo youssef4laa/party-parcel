@@ -6,8 +6,7 @@ import path from 'path';
 
 /**
  * Room Editor Phase 1b, standing test (a): "restore a backup into a temp database, migrate it,
- * and confirm an old room and its boxes still load." The manual proof from Phase 1a (see
- * DECISIONS.md) used a real `npm run backup` snapshot by hand; this codifies the same shape of
+ * and confirm an old room and its boxes still load." The manual proof from Phase 1a used a real `npm run backup` snapshot by hand; this codifies the same shape of
  * proof so it runs on every suite pass instead of once by hand.
  *
  * There's no repo-checked-in binary backup fixture to restore (a binary .db in git is exactly
@@ -68,7 +67,7 @@ test('an old room and its boxes survive restoring a pre-Room-Editor backup and m
     // migrations/20260919235239_init/migration.sql). eventAt is relative to "now" (a fixed literal
     // date would just be further in the past every time this suite runs, and while nothing here
     // actually reads eventAt, a stray absolute date is exactly the kind of fixture that quietly
-    // rots — see DECISIONS.md's Room Editor Phase 1c entry).
+    // rots).
     const legacyEventAt = new Date(Date.now() - 60 * 24 * 60 * 60_000).toISOString(); // 60 days ago
     sqlite(
       dbPath,

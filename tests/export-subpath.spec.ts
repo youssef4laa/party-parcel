@@ -95,7 +95,7 @@ test.describe('static export served from a subpath', () => {
         },
         // Deliberately near the left edge (world x=150, not the 500+ a real placement UI might
         // pick) — at a phone-width viewport most of the 2400px-wide room is off-screen at the
-        // start (see tests/phone.spec.ts's DECISIONS.md note), so this keeps the box reachable
+        // start (see tests/phone.spec.ts), so this keeps the box reachable
         // without needing to pan first.
         x: 150,
         y: 600,
@@ -321,7 +321,7 @@ test.describe('static export served from a subpath', () => {
       // Google Fonts is deliberately NOT in this allowlist — the export self-hosts its pixel
       // fonts (export-site/src/fonts.css) specifically so nothing is requested just to render
       // text. If fonts.googleapis.com/fonts.gstatic.com ever show up again, that's a real
-      // regression, not an accepted exception — see DECISIONS.md.
+      // regression, not an accepted exception.
       const allowedHosts = new Set([
         `localhost:${port}`, // the export's own static files, served from the subpath
         'open.spotify.com', // song embed (this box's song goodie)

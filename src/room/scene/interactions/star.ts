@@ -30,7 +30,7 @@ export function attachStar(
     // A re-click before the previous sparkle's own ~0.5s fade finished must stop ITS ticker
     // callback too, not just destroy the sprite — otherwise that callback runs again next frame
     // against an already-destroyed Sprite and throws (the exact bug this project's cake blow-out
-    // had — see DECISIONS.md's Room Editor Phase 2 entry for the full story of finding it there).
+    // had).
     if (sparkleTickerFn) {
       ticker.remove(sparkleTickerFn);
       sparkleTickerFn = null;

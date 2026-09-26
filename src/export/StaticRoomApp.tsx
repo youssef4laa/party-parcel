@@ -17,8 +17,8 @@ import PasswordPrompt from './PasswordPrompt';
 import type { StaticBoxSecret, StaticManifest } from './manifest';
 import { toRoomObjectApi } from './staticObjects';
 
-/** One exported bundle is always exactly one room, so a fixed namespace is enough — see the
- * "known gap" note in DECISIONS.md about why shots taken *before* export aren't carried over. */
+/** One exported bundle is always exactly one room, so a fixed namespace is enough. (Shots taken
+ * *before* an export aren't carried over: they live in the live app's database, not in the export.) */
 const PHOTOBOOTH_NS = 'export-room';
 
 /** Placeholder shown on the in-room sprite for every box until its password is entered — the

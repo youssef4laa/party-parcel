@@ -39,8 +39,7 @@ test('dragging the cake to a new position keeps its click-to-blow-out-candles in
   if (!box) throw new Error('room canvas did not render');
 
   // Enter edit mode, then collapse the panel (it sits over the right ~320px of the screen) so
-  // the whole canvas is free to drag on — same interaction sequence a real host uses (see
-  // DECISIONS.md's Room Editor entry on the panel-collapse UX fix).
+  // the whole canvas is free to drag on — same interaction sequence a real host uses.
   await page.getByRole('button', { name: 'Edit room' }).click();
   await page.getByRole('button', { name: 'Close edit panel' }).click();
 

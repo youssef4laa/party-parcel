@@ -29,8 +29,7 @@ test.describe('photobooth', () => {
     await page.goto(`/r/${celebrate}`);
     // The canvas's role="application" div renders before Pixi's async init (fonts, WebGL, the
     // camera prop's sprite) finishes — waiting for the pan-hint text first, same as phone.spec.ts,
-    // guarantees the click below actually has something to land on (see DECISIONS.md's Room
-    // Editor Phase 1c entry, which root-caused an identical race in goodies-e2e.spec.ts).
+    // guarantees the click below actually has something to land on (the same race, root-caused in goodies-e2e.spec.ts).
     await expect(page.getByText(/Drag, scroll, or use/)).toBeVisible();
 
     const room = page.getByRole('application', { name: 'Party room' });
@@ -41,7 +40,7 @@ test.describe('photobooth', () => {
     // camera prop sits at world (470, 300..460); click near its lens
     await room.click({ position: { x: 470 * scale, y: 344 * scale } });
     // not getByText('PHOTOBOOTH') — the room's own "{name}'s Nth birthday!" caption contains the
-    // same substring case-insensitively, so it's an ambiguous match (see HANDOFF.md gotchas)
+    // same substring case-insensitively, so it's an ambiguous match
     await expect(page.getByRole('heading', { name: 'PHOTOBOOTH' })).toBeVisible();
 
     await page.getByRole('button', { name: 'Turn on camera' }).click();

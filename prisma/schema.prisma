@@ -1,10 +1,10 @@
 // Party Parcel data model (section 10 of the brief).
-// Dev datasource is SQLite for a zero-setup `npm run dev` (see DECISIONS.md).
+// Dev datasource is SQLite for a zero-setup `npm run dev`.
 // Swapping to Postgres for production is a datasource + DATABASE_URL change only —
 // nothing here uses SQLite- or Postgres-only features (notably: no native `enum`, since D1's
 // very limited ALTER TABLE support makes Prisma's enum-as-CHECK-constraint emulation risky to
 // evolve later; `mode`/`status` are plain strings validated in src/server/rooms.ts instead).
-// Verified against real Postgres 16 and against Cloudflare D1's local emulator — see DECISIONS.md.
+// Verified against real Postgres 16 and against Cloudflare D1's local emulator.
 
 generator client {
   provider = "prisma-client-js"
@@ -50,8 +50,7 @@ model Room {
 }
 
 /// One placed scene element — a wall frame, a plant, a light, a custom-drawn sticker, etc.
-/// The room's entire visual layout is rows in this table, not hardcoded scene-builder code (see
-/// DECISIONS.md's Room Editor entry). A fresh room has none until first loaded, at which point
+/// The room's entire visual layout is rows in this table, not hardcoded scene-builder code. A fresh room has none until first loaded, at which point
 /// the server seeds the default layout (src/server/defaultLayout.ts) — see resolveRoomObjects().
 model RoomObject {
   id                   String    @id @default(cuid())

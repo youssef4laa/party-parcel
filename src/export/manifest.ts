@@ -59,7 +59,7 @@ export type StaticCustomItem = {
  * unlike the rest of `design` (shape/colors/pattern/ribbon/bow/sticker/topper, needed to render
  * the present pile before the password is entered), those two fields are sender-authored text,
  * not cosmetic appearance, so they live inside the encrypted `goodiesFile` blob instead (as
- * `StaticBoxSecret`) — see DECISIONS.md's Milestone 6 gift-readiness entry.
+ * `StaticBoxSecret`).
  */
 export type StaticBoxMeta = {
   id: string;
