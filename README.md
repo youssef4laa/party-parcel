@@ -1,4 +1,6 @@
 # Party Parcel
+<img width="1508" height="847" alt="image" src="https://github.com/user-attachments/assets/8dc821bb-c285-46b0-af78-40f53faa3b8c" />
+
 
 **Build a cozy pixel-art room for someone's birthday, let friends fill it with presents, and lock it
 until the big day.**
@@ -87,6 +89,7 @@ curl -X POST http://localhost:3000/api/dev/seed-room \
 (`eventAt` is an ISO timestamp — the birthday lock opens at that moment, or earlier if the host
 unlocks manually.) This route is dev-only and 404s once `NODE_ENV=production`, so it's not a
 backdoor in a real deployment. The response includes three links:
+![Uploading image.png…]()
 
 ```json
 {
