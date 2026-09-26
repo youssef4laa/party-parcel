@@ -2,13 +2,16 @@ import { defaultLayout } from '@/server/defaultLayout';
 import type { RoomObjectApi } from '../api';
 
 /**
- * Two places render the room scene with no real, persisted RoomObject rows to fetch: the
- * localStorage-backed "/" sandbox (no roomToken, no server round trip at all — the sandbox is deliberately left as it is) and the static export (Phase 5 will bake real object
- * positions into it; until then it renders the same default look every fresh room starts with).
- * Both need buildScene.ts's now fully data-driven renderer fed *something* — this synthesizes the
- * same rows a brand-new real room would get from `defaultLayout()` (server/defaultLayout.ts is a
- * plain function, no Prisma/server-only imports, safe to reuse client-side here) instead of
- * duplicating that layout data a second time.
+ * The "/" demo page renders the room with no real, persisted RoomObject rows to fetch (it's a
+ * localStorage-backed sandbox with no roomToken and no server round trip at all). The scene renderer
+ * (buildScene.ts) is fully data-driven, so it still needs *something* to draw — this synthesizes the
+ * same rows a brand-new real room gets from `defaultLayout()` (server/defaultLayout.ts is a plain
+ * function with no Prisma/server-only imports, safe to reuse client-side) instead of duplicating that
+ * layout a second time.
+ *
+ * The static export does not use this: it bakes the host's actual layout into its manifest and hands
+ * it to RoomCanvas as `staticObjects` (see src/export/StaticRoomApp.tsx). This is the fallback only
+ * when no layout is supplied.
  */
 export function demoLayoutObjects(age?: number | null): RoomObjectApi[] {
   const now = new Date(0).toISOString();

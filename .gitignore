@@ -46,8 +46,10 @@ next-env.d.ts
 /prisma/dev.db-journal
 /.data
 
-# session/harness runtime state, not project config
-/.claude/scheduled_tasks.lock
+# local AI-assistant config and generated agent files — never part of the project
+/.claude/
+/AGENTS.md
+/CLAUDE.md
 
 # static export output (contains a per-run encrypted room, not project source)
 /export/
