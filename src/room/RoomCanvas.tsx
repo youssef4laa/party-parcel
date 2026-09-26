@@ -11,6 +11,9 @@ import { PhotoWall } from './scene/interactions/photobooth';
 import { EditableObjectsLayer } from './scene/editableObjects';
 import { customTextureFor, loadCustomTexture, forgetCustomTexture } from './scene/objectSprites';
 import { defaultPlacementScale } from './pixelOps';
+import { useEditHistory } from './edit/useEditHistory';
+import { OBJECT_CATALOG } from './objectCatalog';
+import { GRID_SIZE, clampToZone, defaultPositionFor, snapScale, snapToGrid, stepScale } from './zones';
 import { demoLayoutObjects } from './scene/demoObjects';
 import { registerBannerText } from './manifest';
 import FrameModal from './ui/FrameModal';
@@ -32,9 +35,6 @@ import {
   replaceCustomItem,
   deleteCustomItem,
   type CustomItemApi,
-  createRoomObject,
-  updateRoomObject,
-  deleteRoomObject,
   resetRoomObjects,
   fetchRoomPermissions,
   updateRoomPermissions,
@@ -69,6 +69,13 @@ export type RoomCanvasProps = {
   /** Filled in once the scene is ready with a small imperative API (currently just
    * `markBoxOpened`) — a plain ref prop, simpler than forwarding a ref through the dynamic-import loader. */
   handleRef?: React.RefObject<RoomCanvasHandle | null>;
+  /** The static export's baked layout (docs/ROOM_EDITOR.md Phase 5). Only used when there is no
+   * `roomToken` (i.e. no server): the read-only exported site renders exactly the objects the host
+   * left in the room instead of the default layout. Must be a stable reference (memoize it) — a new
+   * array identity rebuilds the whole scene. */
+  staticObjects?: RoomObjectApi[];
+  /** The images those objects use (`kind: "custom"`), as URLs relative to the exported page. */
+  staticCustomItems?: Array<{ id: string; url: string }>;
 };
 
 export type RoomCanvasHandle = {
@@ -117,6 +124,8 @@ export default function RoomCanvas({
   isHost = false,
   onBoxClick,
   handleRef,
+  staticObjects,
+  staticCustomItems,
 }: RoomCanvasProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const engineRef = useRef<Engine | null>(null);
@@ -170,10 +179,22 @@ export default function RoomCanvas({
   const [sessionToken] = useState<string | undefined>(() => (roomToken ? getOrCreateSessionToken(roomToken) : undefined));
   const editModeRef = useRef(editMode);
   const selectedIdRef = useRef(selectedId);
+  // Editing preferences (docs/ROOM_EDITOR.md 1b): snap-to-grid, free-scale (default off: integer scale
+  // steps so pixels stay crisp), and — host only — "place anywhere", which lifts the zone limit.
+  const [snapOn, setSnapOn] = useState(false);
+  const [freeScale, setFreeScale] = useState(false);
+  const [placeAnywhere, setPlaceAnywhere] = useState(false);
+  const prefsRef = useRef({ snapOn: false, freeScale: false, placeAnywhere: false, isHost });
+  useEffect(() => {
+    prefsRef.current = { snapOn, freeScale, placeAnywhere: isHost && placeAnywhere, isHost };
+  }, [snapOn, freeScale, placeAnywhere, isHost]);
 
   const syncObjects = useCallback((next: RoomObjectApi[]) => {
     objectsRef.current = next;
     setObjects(next);
+    // If an undo/redo/delete removed the selected object, the selection goes with it. One that still
+    // exists stays selected, so you can keep working on it (e.g. undo a move, then nudge it).
+    if (selectedIdRef.current && !next.some((o) => o.id === selectedIdRef.current)) setSelectedId(null);
     const engine = engineRef.current;
     if (engine) engine.editableLayer.setObjects(renderableObjects(next), editModeRef.current, selectedIdRef.current, objectsInteractive(editModeRef.current, capabilitiesRef.current));
   }, []);
@@ -188,6 +209,20 @@ export default function RoomCanvas({
     selectedIdRef.current = selectedId;
     engineRef.current?.editableLayer.setObjects(renderableObjects(objectsRef.current), editModeRef.current, selectedId, objectsInteractive(editModeRef.current, capabilitiesRef.current));
   }, [selectedId]);
+
+  // Destructured on purpose: the hook returns a fresh object every render, but each function in it is
+  // stable. Depending on the object would change `persistPresent` -> `placeBoxSprite` every render,
+  // and `placeBoxSprite` is a dependency of the scene-build effect — i.e. it would rebuild the
+  // entire Pixi scene on every render.
+  const {
+    updateObject, addObject, removeObject, duplicateObject, recordExternal, serial, undo, redo, clear: clearHistory, canUndo, canRedo,
+  } = useEditHistory({
+    roomToken,
+    sessionToken,
+    objectsRef,
+    syncObjects,
+    setEditError,
+  });
 
   const syncOutline = useCallback((id: string, x: number, y: number) => {
     const outline = outlinesRef.current.get(id);
@@ -206,25 +241,43 @@ export default function RoomCanvas({
     entry.sprite.height = size;
   }, [syncOutline]);
 
-  /** Sends a move/resize/reorder to the server; on refusal the sprite snaps back and the reason is
-   * shown. The server is the real gate (canMovePresent) — this just keeps the UI honest about it. */
-  const persistPresent = useCallback(
+  /** Sends a move/resize/reorder to the server and applies the saved result to the sprite. Throws on
+   * refusal — the server is the real gate (canMovePresent); callers decide how to report it. */
+  const sendPresent = useCallback(
     async (id: string, patch: PresentPatch) => {
       const before = presentsRef.current.get(id);
-      if (!roomToken || !before) return;
-      setEditError(null);
-      try {
-        const { box: saved } = await updateBox(roomToken, id, patch, deleteTokensRef.current.get(id));
-        const next: PlacedBox = { ...before, x: saved.x, y: saved.y, z: saved.z, scale: saved.scale };
-        presentsRef.current.set(id, next);
-        applyPresentToSprite(next);
-      } catch (e) {
-        applyPresentToSprite(before);
-        setEditError(e instanceof Error ? e.message : 'Could not move that present.');
-      }
+      if (!roomToken || !before) throw new Error('That present is gone.');
+      const { box: saved } = await updateBox(roomToken, id, patch, deleteTokensRef.current.get(id));
+      const next: PlacedBox = { ...before, x: saved.x, y: saved.y, z: saved.z, scale: saved.scale };
+      presentsRef.current.set(id, next);
+      applyPresentToSprite(next);
       rebuildPresentsState();
     },
     [roomToken, applyPresentToSprite, rebuildPresentsState],
+  );
+
+  /** A user-driven present edit: on refusal the sprite snaps back and the reason is shown; on success
+   * it joins the undo history (undo/redo replay through the same server route). */
+  const persistPresent = useCallback(
+    (id: string, patch: PresentPatch) =>
+      // Same queue as room-object edits and undo, so an undo pressed right after a present move
+      // waits for that move to be saved and recorded.
+      serial(async () => {
+        const before = presentsRef.current.get(id);
+        if (!roomToken || !before) return;
+        setEditError(null);
+        try {
+          await sendPresent(id, patch);
+          const undoPatch: PresentPatch = {};
+          for (const key of Object.keys(patch) as Array<keyof PresentPatch>) undoPatch[key] = before[key] as number;
+          recordExternal({ undo: () => sendPresent(id, undoPatch), redo: () => sendPresent(id, patch) });
+        } catch (e) {
+          applyPresentToSprite(before);
+          rebuildPresentsState();
+          setEditError(e instanceof Error ? e.message : 'Could not move that present.');
+        }
+      }),
+    [roomToken, serial, sendPresent, recordExternal, applyPresentToSprite, rebuildPresentsState],
   );
 
   const placeBoxSprite = useCallback(
@@ -299,25 +352,51 @@ export default function RoomCanvas({
     [onBoxClick, canMovePresentHint, persistPresent, rebuildPresentsState, isHost, syncOutline],
   );
 
+  /** Where an object may actually rest: inside its zone (unless the host turned on "place anywhere")
+   * and on the grid if snapping is on. The server enforces the zone again for everyone but the host. */
+  const constrainPosition = useCallback((zone: string, x: number, y: number) => {
+    const { snapOn: snap, placeAnywhere: anywhere } = prefsRef.current;
+    let p = { x, y };
+    if (snap) p = { x: snapToGrid(p.x), y: snapToGrid(p.y) };
+    if (!anywhere) p = clampToZone(zone, p.x, p.y);
+    return { x: Math.round(p.x), y: Math.round(p.y) };
+  }, []);
+
   const handleObjectMoved = useCallback(
     async (id: string, x: number, y: number) => {
-      if (!roomToken) return;
-      const existing = objectsRef.current.find((o) => o.id === id);
-      try {
-        const updated = await updateRoomObject(roomToken, sessionToken, id, {
-          x,
-          y,
-          expectedUpdatedAt: existing?.updatedAt,
-        });
-        syncObjects(objectsRef.current.map((o) => (o.id === id ? updated : o)));
-      } catch (e) {
-        setEditError(e instanceof Error ? e.message : 'Could not move that item.');
-        // snap back to the server's last-known position by re-rendering from current state
-        syncObjects(objectsRef.current);
+      const obj = objectsRef.current.find((o) => o.id === id);
+      if (!roomToken || !obj) return;
+      const p = constrainPosition(obj.zone, x, y);
+      if (p.x === obj.x && p.y === obj.y) {
+        syncObjects(objectsRef.current); // a click, or dropped where it started: nothing to save, snap the node back
+        return;
       }
+      await updateObject(id, { x: p.x, y: p.y });
     },
-    [roomToken, sessionToken, syncObjects],
+    [roomToken, constrainPosition, updateObject, syncObjects],
   );
+
+  /** A corner-handle drag or pinch ended at `raw` scale: snap it (crisp steps unless free), save it. */
+  const handleResizeEnd = useCallback(
+    async (id: string, raw: number) => {
+      const obj = objectsRef.current.find((o) => o.id === id);
+      if (!roomToken || !obj) return;
+      const scale = snapScale(raw, { free: prefsRef.current.freeScale, min: LIMITS.minObjectScale, max: LIMITS.maxObjectScale });
+      if (scale === obj.scale) {
+        syncObjects(objectsRef.current); // ended where it began (or snapped back): restore the node's live preview
+        return;
+      }
+      await updateObject(id, { scale });
+    },
+    [roomToken, updateObject, syncObjects],
+  );
+
+  // The scene is built once (its effect must not depend on anything that changes), so the layer's
+  // callbacks reach the CURRENT handlers through this ref instead of being captured at build time.
+  const layerActionsRef = useRef({ moved: handleObjectMoved, resized: handleResizeEnd });
+  useEffect(() => {
+    layerActionsRef.current = { moved: handleObjectMoved, resized: handleResizeEnd };
+  }, [handleObjectMoved, handleResizeEnd]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -377,7 +456,12 @@ export default function RoomCanvas({
       // already reflects real positions/hidden state. The "/" sandbox and the static export have
       // no roomToken (no real RoomObject rows to fetch at all — see demoObjects.ts) and fall back
       // to the same default layout a brand-new real room seeds.
-      let initialObjects: RoomObjectApi[] = roomToken ? [] : demoLayoutObjects(age);
+      let initialObjects: RoomObjectApi[] = roomToken ? [] : (staticObjects ?? demoLayoutObjects(age));
+      // The export has no server to ask for custom images: load the ones it shipped, up front, so a
+      // custom object never paints as an empty sprite (same reason the live room does this).
+      if (!roomToken && staticCustomItems) {
+        await Promise.all(staticCustomItems.map((i) => loadCustomTexture(i.id, i.url).catch(() => undefined)));
+      }
       if (roomToken) {
         try {
           initialObjects = await fetchRoomObjects(roomToken);
@@ -435,9 +519,14 @@ export default function RoomCanvas({
           if (id !== null) setSelectedPresentId(null);
         },
         (id, x, y) => {
-          void handleObjectMoved(id, x, y);
+          void layerActionsRef.current.moved(id, x, y);
         },
+        (id, raw) => {
+          void layerActionsRef.current.resized(id, raw);
+        },
+        (suspended) => camera.suspendPointer(suspended),
       );
+      editableLayer.enablePinch(application.canvas);
       editableLayer.setObjects(renderableObjects(initialObjects), editModeRef.current, selectedIdRef.current, objectsInteractive(editModeRef.current, capabilitiesRef.current));
 
       engineRef.current = {
@@ -494,7 +583,7 @@ export default function RoomCanvas({
         app.destroy(true, { children: true });
       }
     };
-  }, [bannerText, placeBoxSprite, source, handleRef, roomToken, handleObjectMoved, age, sessionToken]);
+  }, [bannerText, placeBoxSprite, source, handleRef, roomToken, age, sessionToken, staticObjects, staticCustomItems]);
 
   // Rebuilds the interactive/animated legacy scene whenever edit mode toggles off (or, on the
   // very first render, is skipped — the main init effect above already built it once). Turning
@@ -535,21 +624,14 @@ export default function RoomCanvas({
   const handleAddItem = useCallback(
     async (kind: string) => {
       if (!roomToken) return;
-      setEditError(null);
-      try {
-        const created = await createRoomObject(roomToken, sessionToken, {
-          kind,
-          x: ROOM_EDITOR_DEFAULT_X,
-          y: ROOM_EDITOR_DEFAULT_Y,
-          zone: 'anywhere',
-        });
-        syncObjects([...objectsRef.current, created]);
-        setSelectedId(created.id);
-      } catch (e) {
-        setEditError(e instanceof Error ? e.message : 'Could not add that item.');
-      }
+      // A new item takes its catalog zone and starts inside it (a wall item on the wall, a ceiling
+      // item at the top) — the server does the same for non-hosts, so the two always agree.
+      const zone = OBJECT_CATALOG[kind]?.defaultZone ?? 'anywhere';
+      const at = defaultPositionFor(zone);
+      const created = await addObject({ kind, x: at.x, y: at.y, zone });
+      if (created) setSelectedId(created.id);
     },
-    [roomToken, sessionToken, syncObjects],
+    [roomToken, addObject],
   );
 
   // --- Custom items: the room's "My items" library (docs/ROOM_EDITOR.md Phase 3) ---
@@ -597,31 +679,26 @@ export default function RoomCanvas({
       // The server removed every placed copy too — pull the fresh object list so none linger.
       syncObjects(await fetchRoomObjects(roomToken));
       setSelectedId(null);
+      clearHistory(); // the placed copies are gone for good; history entries pointing at them are dead
       await refreshLibrary();
     },
-    [roomToken, sessionToken, refreshLibrary, syncObjects],
+    [roomToken, sessionToken, refreshLibrary, syncObjects, clearHistory],
   );
 
   const handlePlaceCustomItem = useCallback(
     async (item: CustomItemApi) => {
       if (!roomToken) return;
-      setEditError(null);
-      try {
-        const created = await createRoomObject(roomToken, sessionToken, {
-          kind: 'custom',
-          assetId: item.id,
-          x: ROOM_EDITOR_DEFAULT_X,
-          y: ROOM_EDITOR_DEFAULT_Y,
-          zone: 'anywhere',
-          scale: defaultPlacementScale(item.width, item.height, { min: LIMITS.minObjectScale, max: LIMITS.maxObjectScale }),
-        });
-        syncObjects([...objectsRef.current, created]);
-        setSelectedId(created.id);
-      } catch (e) {
-        setEditError(e instanceof Error ? e.message : 'Could not place that item.');
-      }
+      const created = await addObject({
+        kind: 'custom',
+        assetId: item.id,
+        x: ROOM_EDITOR_DEFAULT_X,
+        y: ROOM_EDITOR_DEFAULT_Y,
+        zone: 'anywhere',
+        scale: defaultPlacementScale(item.width, item.height, { min: LIMITS.minObjectScale, max: LIMITS.maxObjectScale }),
+      });
+      if (created) setSelectedId(created.id);
     },
-    [roomToken, sessionToken, syncObjects],
+    [roomToken, addObject],
   );
 
   /** The selected present's toolbar: only position, scale, and z ever go over the wire (the PATCH
@@ -673,32 +750,129 @@ export default function RoomCanvas({
   const handleUpdateSelected = useCallback(
     async (patch: RoomObjectPatch) => {
       if (!roomToken || !selectedId) return;
-      const existing = objectsRef.current.find((o) => o.id === selectedId);
-      setEditError(null);
-      try {
-        const updated = await updateRoomObject(roomToken, sessionToken, selectedId, {
-          ...patch,
-          expectedUpdatedAt: existing?.updatedAt,
-        });
-        syncObjects(objectsRef.current.map((o) => (o.id === selectedId ? updated : o)));
-      } catch (e) {
-        setEditError(e instanceof Error ? e.message : 'Could not update that item.');
-      }
+      await updateObject(selectedId, patch);
     },
-    [roomToken, sessionToken, selectedId, syncObjects],
+    [roomToken, selectedId, updateObject],
+  );
+
+  /** Scale +/−: crisp whole-number steps by default, quarter steps with free-scale on. */
+  const handleStepScale = useCallback(
+    async (dir: 1 | -1) => {
+      const obj = objectsRef.current.find((o) => o.id === selectedId);
+      if (!roomToken || !obj) return;
+      const next = stepScale(obj.scale, dir, { free: freeScale, min: LIMITS.minObjectScale, max: LIMITS.maxObjectScale });
+      if (next !== obj.scale) await updateObject(obj.id, { scale: next });
+    },
+    [roomToken, selectedId, freeScale, updateObject],
   );
 
   const handleDeleteSelected = useCallback(async () => {
     if (!roomToken || !selectedId) return;
-    setEditError(null);
-    try {
-      await deleteRoomObject(roomToken, sessionToken, selectedId);
-      syncObjects(objectsRef.current.filter((o) => o.id !== selectedId));
-      setSelectedId(null);
-    } catch (e) {
-      setEditError(e instanceof Error ? e.message : 'Could not delete that item.');
-    }
-  }, [roomToken, sessionToken, selectedId, syncObjects]);
+    if (await removeObject(selectedId)) setSelectedId(null);
+  }, [roomToken, selectedId, removeObject]);
+
+  const handleDuplicateSelected = useCallback(async () => {
+    if (!roomToken || !selectedId) return;
+    const copy = await duplicateObject(selectedId, { x: 32, y: 16 }, (x, y) => {
+      const zone = objectsRef.current.find((o) => o.id === selectedId)?.zone ?? 'anywhere';
+      return constrainPosition(zone, x, y);
+    });
+    if (copy) setSelectedId(copy.id);
+  }, [roomToken, selectedId, duplicateObject, constrainPosition]);
+
+  // --- Keyboard (docs/ROOM_EDITOR.md 1b): arrows nudge, Delete, Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z ---
+  // Nudging shows the new position immediately but only SAVES after a short pause, so holding an
+  // arrow key is one edit (one undo step, one request) rather than dozens that would trip the rate limit.
+  const nudgeRef = useRef<{
+    kind: 'object' | 'present';
+    id: string;
+    beforeX: number;
+    beforeY: number;
+    x: number;
+    y: number;
+    timer: ReturnType<typeof setTimeout>;
+  } | null>(null);
+
+  const commitNudge = useCallback(() => {
+    const n = nudgeRef.current;
+    if (!n) return;
+    nudgeRef.current = null;
+    if (n.kind === 'object') void updateObject(n.id, { x: n.x, y: n.y }, { before: { x: n.beforeX, y: n.beforeY } });
+    else void persistPresent(n.id, { x: n.x, y: n.y });
+  }, [updateObject, persistPresent]);
+
+  const nudgeSelected = useCallback(
+    (dx: number, dy: number, big: boolean) => {
+      const { snapOn: snap } = prefsRef.current;
+      const step = snap ? (big ? GRID_SIZE * 4 : GRID_SIZE) : big ? 10 : 1;
+      const pending = nudgeRef.current;
+      const obj = selectedId ? objectsRef.current.find((o) => o.id === selectedId) : undefined;
+      const present = !obj && selectedPresentId ? presentsRef.current.get(selectedPresentId) : undefined;
+      if (!obj && !present) return;
+      const kind = obj ? 'object' : 'present';
+      const id = (obj?.id ?? present!.id) as string;
+      if (pending && (pending.kind !== kind || pending.id !== id)) commitNudge(); // switched target: save the old one first
+      const base = nudgeRef.current ?? { beforeX: (obj ?? present)!.x, beforeY: (obj ?? present)!.y, x: (obj ?? present)!.x, y: (obj ?? present)!.y };
+      let x = base.x + dx * step;
+      let y = base.y + dy * step;
+      if (obj) {
+        ({ x, y } = constrainPosition(obj.zone, x, y));
+        syncObjects(objectsRef.current.map((o) => (o.id === obj.id ? { ...o, x, y } : o)));
+      } else {
+        const room = { x: Math.min(2400, Math.max(0, x)), y: Math.min(760, Math.max(0, y)) };
+        ({ x, y } = isHost ? room : nearestPointInZones(room.x, room.y, getDropZones()));
+        const entry = engineRef.current?.boxSprites.get(id);
+        entry?.sprite.position.set(x, y);
+        syncOutline(id, x, y);
+      }
+      if (nudgeRef.current) clearTimeout(nudgeRef.current.timer);
+      nudgeRef.current = { kind, id, beforeX: base.beforeX, beforeY: base.beforeY, x, y, timer: setTimeout(commitNudge, 450) };
+    },
+    [selectedId, selectedPresentId, constrainPosition, syncObjects, commitNudge, isHost, syncOutline],
+  );
+
+  // While something is selected in edit mode the arrow keys belong to it, not to the camera pan.
+  useEffect(() => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    const owns = editMode && (selectedId !== null || selectedPresentId !== null);
+    engine.camera.suspendKeyboard(owns);
+    return () => engine.camera.suspendKeyboard(false);
+  }, [editMode, selectedId, selectedPresentId]);
+
+  useEffect(() => {
+    if (!editMode) return;
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)) return;
+      // The pixel editor has its own undo/redo (Ctrl+Z inside a drawing must not also undo a room edit).
+      if (el?.closest('[data-own-shortcuts]')) return;
+      const mod = e.metaKey || e.ctrlKey;
+      const key = e.key.toLowerCase();
+      if (mod && key === 'z') {
+        e.preventDefault();
+        commitNudge();
+        void (e.shiftKey ? redo() : undo());
+      } else if (mod && key === 'y') {
+        e.preventDefault();
+        void redo();
+      } else if (mod && key === 'd') {
+        e.preventDefault();
+        void handleDuplicateSelected();
+      } else if (key === 'escape') {
+        setSelectedId(null);
+        setSelectedPresentId(null);
+      } else if ((key === 'delete' || key === 'backspace') && selectedId) {
+        e.preventDefault();
+        void handleDeleteSelected();
+      } else if (!mod && key.startsWith('arrow') && (selectedId || selectedPresentId)) {
+        e.preventDefault();
+        nudgeSelected(key === 'arrowleft' ? -1 : key === 'arrowright' ? 1 : 0, key === 'arrowup' ? -1 : key === 'arrowdown' ? 1 : 0, e.shiftKey);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [editMode, selectedId, selectedPresentId, undo, redo, commitNudge, nudgeSelected, handleDuplicateSelected, handleDeleteSelected]);
 
   const handleResetLayout = useCallback(async () => {
     if (!roomToken) return;
@@ -707,10 +881,11 @@ export default function RoomCanvas({
       const next = await resetRoomObjects(roomToken);
       syncObjects(next);
       setSelectedId(null);
+      clearHistory(); // every object has a new id now; nothing recorded before this can be replayed
     } catch (e) {
       setEditError(e instanceof Error ? e.message : 'Could not reset the layout.');
     }
-  }, [roomToken, syncObjects]);
+  }, [roomToken, syncObjects, clearHistory]);
 
   const handleSavePermissions = useCallback(
     async (next: RoomPermissions) => {
@@ -861,6 +1036,21 @@ export default function RoomCanvas({
           age={age}
           customItems={customItems}
           presents={presents}
+          canUndo={canUndo}
+          canRedo={canRedo}
+          onUndo={() => {
+            commitNudge();
+            void undo();
+          }}
+          onRedo={() => void redo()}
+          snapOn={snapOn}
+          onToggleSnap={() => setSnapOn((v) => !v)}
+          freeScale={freeScale}
+          onToggleFreeScale={() => setFreeScale((v) => !v)}
+          placeAnywhere={isHost && placeAnywhere}
+          onTogglePlaceAnywhere={isHost ? () => setPlaceAnywhere((v) => !v) : undefined}
+          onStepScale={(dir) => void handleStepScale(dir)}
+          onDuplicate={() => void handleDuplicateSelected()}
           selectedPresentId={selectedPresentId}
           onSelectPresent={(id) => {
             setSelectedPresentId(id);

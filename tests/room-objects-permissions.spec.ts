@@ -36,7 +36,7 @@ test.describe('room objects — create/decorate permission before unlock', () =>
   test('celebrate token cannot create an object before unlock, even with canRearrange on', async ({ request }) => {
     await setPermissions(request, admin, { celebrant: { canRearrange: true } });
     const res = await request.post(`/api/rooms/${celebrate}/objects`, {
-      data: { kind: 'sofa', x: 100, y: 100, zone: 'floor' },
+      data: { kind: 'sofa', x: 100, y: 650, zone: 'floor' },
     });
     expect(res.status()).toBe(403);
     const body = await res.json();
@@ -47,14 +47,14 @@ test.describe('room objects — create/decorate permission before unlock', () =>
     await setPermissions(request, admin, { contributors: { canDecorate: 'off', canImport: false, canDraw: false, canMoveOwnPresents: false, maxItemsPerContributor: 10 } });
     const res = await request.post(`/api/rooms/${contribute}/objects`, {
       headers: { 'X-Contributor-Session': 'sess-a' },
-      data: { kind: 'sofa', x: 100, y: 100, zone: 'floor' },
+      data: { kind: 'sofa', x: 100, y: 650, zone: 'floor' },
     });
     expect(res.status()).toBe(403);
   });
 
   test('admin can always create, room stays locked', async ({ request }) => {
     const res = await request.post(`/api/rooms/${admin}/objects`, {
-      data: { kind: 'sofa', x: 100, y: 100, zone: 'floor' },
+      data: { kind: 'sofa', x: 100, y: 650, zone: 'floor' },
     });
     expect(res.ok()).toBeTruthy();
   });
@@ -77,7 +77,7 @@ test.describe('room objects — contributor ownership isolation (own-only mode)'
 
     const created = await request.post(`/api/rooms/${contribute}/objects`, {
       headers: { 'X-Contributor-Session': sessionA },
-      data: { kind: 'sofa', x: 200, y: 200, zone: 'floor' },
+      data: { kind: 'sofa', x: 200, y: 650, zone: 'floor' },
     });
     expect(created.ok()).toBeTruthy();
     objectId = (await created.json()).object.id;
@@ -109,7 +109,7 @@ test.describe('room objects — contributor ownership isolation (own-only mode)'
 
   test('a contributor session with no prior items cannot create without a session header', async ({ request }) => {
     const res = await request.post(`/api/rooms/${contribute}/objects`, {
-      data: { kind: 'sofa', x: 10, y: 10, zone: 'floor' },
+      data: { kind: 'sofa', x: 10, y: 650, zone: 'floor' },
     });
     expect(res.status()).toBe(400);
   });
@@ -129,7 +129,7 @@ test.describe('room objects — freeze layout, locking, and staleness', () => {
     });
     const created = await request.post(`/api/rooms/${contribute}/objects`, {
       headers: { 'X-Contributor-Session': 'freeze-test-session' },
-      data: { kind: 'sofa', x: 50, y: 50, zone: 'floor' },
+      data: { kind: 'sofa', x: 50, y: 650, zone: 'floor' },
     });
     objectId = (await created.json()).object.id;
   });
@@ -193,7 +193,7 @@ test.describe('room objects — celebrant rearrange gate and reset-to-default', 
     admin = tokenFromLink(room.links.admin);
     celebrate = tokenFromLink(room.links.celebrate);
     const created = await request.post(`/api/rooms/${admin}/objects`, {
-      data: { kind: 'sofa', x: 10, y: 10, zone: 'floor' },
+      data: { kind: 'sofa', x: 10, y: 650, zone: 'floor' },
     });
     objectId = (await created.json()).object.id;
   });
@@ -211,7 +211,7 @@ test.describe('room objects — celebrant rearrange gate and reset-to-default', 
     expect(update.ok()).toBeTruthy();
 
     const create = await request.post(`/api/rooms/${celebrate}/objects`, {
-      data: { kind: 'sofa', x: 40, y: 40, zone: 'floor' },
+      data: { kind: 'sofa', x: 40, y: 650, zone: 'floor' },
     });
     expect(create.status()).toBe(403);
   });
@@ -241,14 +241,14 @@ test.describe('room objects — per-contributor item cap', () => {
     for (let i = 0; i < 2; i++) {
       const res = await request.post(`/api/rooms/${contribute}/objects`, {
         headers: { 'X-Contributor-Session': session },
-        data: { kind: 'sofa', x: i, y: i, zone: 'floor' },
+        data: { kind: 'sofa', x: i, y: 650, zone: 'floor' },
       });
       expect(res.ok()).toBeTruthy();
     }
 
     const third = await request.post(`/api/rooms/${contribute}/objects`, {
       headers: { 'X-Contributor-Session': session },
-      data: { kind: 'sofa', x: 99, y: 99, zone: 'floor' },
+      data: { kind: 'sofa', x: 99, y: 650, zone: 'floor' },
     });
     expect(third.status()).toBe(400);
     expect((await third.json()).error).toMatch(/max of 2/);

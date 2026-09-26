@@ -1,6 +1,7 @@
 import { getTexture } from '../manifest';
 import { drawNeonSignText } from '../sprites/decor';
 import { drawCake } from '../sprites/cake';
+import { drawBanner } from '../sprites/banner';
 import { parseCakeConfig } from '../cakeConfig';
 import { Texture } from 'pixi.js';
 
@@ -36,6 +37,10 @@ const ANCHOR_OVERRIDE: Record<string, { x: number; y: number }> = {
   banner: { x: 0.5, y: 0 },
   lantern: { x: 0.5, y: 0 },
   'paper-lantern-decor': { x: 0.5, y: 0 },
+  'rug-round': { x: 0.5, y: 1 },
+  'rug-stripes': { x: 0.5, y: 1 },
+  'rug-checker': { x: 0.5, y: 1 },
+  'rug-runner': { x: 0.5, y: 1 },
   // These five legacy kinds all draw from their own top-left origin (matching the original
   // hardcoded buildScene.ts, which never passed an anchor option for them) — their own zone's
   // default anchor (see ZONE_DEFAULT_ANCHOR below) would otherwise reposition them incorrectly.
@@ -73,6 +78,11 @@ export function dynamicTextureFor(kind: string, config: Record<string, unknown>,
   if (kind === 'balloon') {
     const color = typeof config.color === 'string' ? config.color : 'purple';
     return getTexture(`balloon_${color}`);
+  }
+  // An extra banner carrying its own words (the room's own banner text is the legacy `banner` kind).
+  if (kind === 'banner-text') {
+    const text = (typeof config.text === 'string' ? config.text : '').trim().slice(0, 16).toUpperCase() || 'PARTY!';
+    return getOrBuildCached(`banner-text:${text}`, () => drawBanner(text));
   }
   // A cake's entire look (style/colors/topper/text/candles) is per-instance data — always shown
   // lit here, since edit mode's static representation never toggles (see cakeTextureFor for the

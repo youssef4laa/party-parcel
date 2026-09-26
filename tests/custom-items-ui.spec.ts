@@ -287,22 +287,49 @@ test('draw: undo and redo work through the buttons and the keyboard, and an empt
   await setColor(page, '#123456');
   await click(page, 4, 4, 16);
   await click(page, 6, 6, 16);
-  await page.getByRole('button', { name: 'Undo' }).click(); // removes (6,6)
-  await page.getByRole('button', { name: 'Undo' }).click(); // removes (4,4)
-  await expect(page.getByRole('button', { name: 'Undo' })).toBeDisabled();
+  await page.getByTestId('pixel-editor').getByRole('button', { name: 'Undo' }).click(); // removes (6,6)
+  await page.getByTestId('pixel-editor').getByRole('button', { name: 'Undo' }).click(); // removes (4,4)
+  await expect(page.getByTestId('pixel-editor').getByRole('button', { name: 'Undo' })).toBeDisabled();
 
   await page.getByRole('button', { name: 'Save to My items' }).click();
   await expect(page.getByText('Draw something first')).toContainText('completely transparent');
   expect(await libraryItems(request, admin)).toHaveLength(0);
 
-  await page.getByRole('button', { name: 'Redo' }).click(); // brings back (4,4) only
-  await page.getByTestId('pixel-editor').press('Control+Shift+Z'); // keyboard redo -> (6,6) again
-  await page.getByTestId('pixel-editor').press('Control+Z'); // keyboard undo -> just (4,4)
+  await page.getByTestId('pixel-editor').getByRole('button', { name: 'Redo' }).click(); // brings back (4,4) only
+  // Keyboard shortcuts must work wherever focus is — including the page body, which is where focus
+  // ends up after clicking the canvas or a button that just became disabled (that used to be a bug).
+  await page.keyboard.press('Control+Shift+Z'); // redo -> (6,6) again
+  await page.keyboard.press('Control+Z'); // undo -> just (4,4)
   await page.getByRole('button', { name: 'Save to My items' }).click();
   await expect(page.getByTestId('library-item')).toHaveCount(1);
   const px = await storedPixels(request, (await libraryItems(request, admin))[0].url);
   expect(px.at(4, 4)).toEqual([0x12, 0x34, 0x56, 255]);
   expect(px.at(6, 6)).toEqual([0, 0, 0, 0]);
+});
+
+test('draw: Ctrl/Cmd+Z after clicking the canvas undoes the stroke — and never a room edit made earlier', async ({ page, request }) => {
+  const room = await seedRoom(request, { celebrantName: 'UiDrawFocusUndo' });
+  const admin = tokenFromLink(room.links.admin);
+  await page.goto(`/r/${admin}`);
+  await expect(page.getByText(/Drag, scroll, or use/)).toBeVisible();
+  await page.getByRole('button', { name: 'Edit room' }).click();
+  // a room edit first, so the ROOM history has something a stray Ctrl+Z could wrongly undo
+  await page.getByRole('button', { name: '+ Sofa' }).click();
+  const sofaCount = async () =>
+    ((await (await request.get(`/api/rooms/${admin}/objects`)).json()).objects as Array<{ kind: string }>).filter((o) => o.kind === 'sofa').length;
+  await expect.poll(sofaCount).toBe(1);
+
+  await page.getByRole('button', { name: 'Draw & Import' }).click();
+  await newDrawing(page, 16);
+  await setColor(page, '#ff0000');
+  await click(page, 3, 3, 16); // clicking the canvas leaves keyboard focus on the page body, not in the editor
+  const editorUndo = page.getByTestId('pixel-editor').getByRole('button', { name: 'Undo' });
+  await expect(editorUndo).toBeEnabled();
+
+  await page.keyboard.press('Control+z');
+  await expect(editorUndo).toBeDisabled(); // the stroke is undone
+  await page.waitForTimeout(600);
+  expect(await sofaCount(), 'Ctrl+Z inside the drawing editor must not undo the room edit behind it').toBe(1);
 });
 
 test('draw: flip and rotate change the picture, and the canvas sizes 16/32/64/128 are all offered', async ({ page, request }) => {

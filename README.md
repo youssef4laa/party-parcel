@@ -35,6 +35,17 @@ tests again under real WebKit; `npx playwright test --project=mobile tests/phone
 touch-specific pan/drag tests. Both need `npx playwright install webkit` first (one-time, not part
 of the default `npm install` — see [HANDOFF.md](HANDOFF.md) if that step is unfamiliar).
 
+The Room Editor has its own specs: permissions and zones (`room-objects-*.spec.ts`,
+`room-zones.spec.ts`), the edit tools with real mouse, keyboard and touch input
+(`room-edit-tools.spec.ts`), the catalog and lights (`room-catalog.spec.ts`), cakes
+(`cake-*.spec.ts`), importing and drawing (`pixel-ops`, `custom-items-*.spec.ts`), presents and
+multi-gift boxes (`presents-*`, `gifts-*.spec.ts`), and the static export end to end
+(`export-*.spec.ts`).
+
+**Run the suite one copy at a time.** Every spec shares one dev server and one SQLite database, so
+two overlapping `playwright test` runs interfere with each other and fail in ways that look like
+real bugs. Wait for one to finish before starting another.
+
 ## Creating a room and adding friends' content
 
 There's no host sign-up UI yet (that's Milestone 7 — see [HANDOFF.md](HANDOFF.md) for what's
@@ -155,6 +166,14 @@ not read at runtime.
 | `NEXT_PUBLIC_MAX_PHOTO_BYTES` | 10 MB | one photo upload |
 | `NEXT_PUBLIC_MAX_VIDEO_UPLOAD_BYTES` | 20 MB | one video/voice/song file upload |
 | `NEXT_PUBLIC_MAX_VOICE_SECONDS` | 180 (3 min) | one voice recording's length |
+| `NEXT_PUBLIC_MAX_OBJECTS_PER_ROOM` | 300 | decoration objects in a room |
+| `NEXT_PUBLIC_MAX_ITEMS_PER_CONTRIBUTOR` | 10 | default items one contributor may add (host can change it per room) |
+| `NEXT_PUBLIC_MIN_OBJECT_SCALE` / `MAX_OBJECT_SCALE` | 0.25 / 4 | how small/large a decoration can be resized |
+| `NEXT_PUBLIC_MIN_PRESENT_SCALE` / `MAX_PRESENT_SCALE` | 0.5 / 3 | how small/large a placed present can be resized |
+| `NEXT_PUBLIC_MAX_CUSTOM_ITEM_BYTES` | 512 KB | one imported/drawn image |
+| `NEXT_PUBLIC_MAX_CUSTOM_ITEM_PX` | 512 | its width and height |
+| `NEXT_PUBLIC_MAX_CUSTOM_ITEMS_PER_ROOM` | 40 | images in "My items" |
+| `NEXT_PUBLIC_MAX_GIFTS_PER_BOX` | 6 | separately wrapped gifts in one box |
 
 The brief's own numbers (50 goodies / 500 MB per box) are the "paid tier" reference —
 `RECOMMENDED_PAID_TIER` in `src/config/limits.ts` — raise the env vars to those, or higher, for a
@@ -163,6 +182,110 @@ bigger room.
 Two more caps exist but aren't env-configurable yet (a code change, not just a setting, would be
 needed): `MAX_BOXES_PER_ROOM` and `MAX_PHOTOBOOTH_SHOTS_PER_ROOM`, both 100, hardcoded in
 `src/server/limits.ts`.
+
+## Decorating the room
+
+The room is built from objects you can move, resize and change — not a fixed picture. This all
+happens on the live room page (`/r/<token>`); the "/" demo and the exported site don't have it.
+
+**Opening edit mode.** Click the pencil (✏️) in the top-right corner. The host's link always has it.
+A contributor's or celebrant's link only shows it if the host allowed something — see
+[Permissions](#permissions) below. A side panel opens with tabs: **Items**, **Draw & Import**,
+**Layers**, **Presents**, and (host only) **Permissions**. The ✕ hides the panel but keeps edit mode on
+(so you can drag things with the whole room visible); click the pencil again to bring it back, and
+once more to leave edit mode.
+
+**Adding things.** *Items* lists the built-in catalog — search it or filter by category:
+- *Furniture*: sofa, armchair, bookshelf, side table, dresser, bench, chair, bean bag, cushions, and
+  rugs in a round, striped, checkered and runner size/pattern.
+- *Plants & trees*: potted plant, tall tree, pine, palm, flower pots, hanging plant.
+- *Lights*: string lights (they twinkle), paper lantern, floor lamp, table lamp, neon sign, disco ball,
+  candles, spotlight. Lights cast a soft glow that respects layering — a lamp behind a sofa doesn't
+  light the sofa.
+- *Party decor*: streamers, a banner with your own words, balloon clusters, piñata, confetti, two
+  posters, a photo string with clothespins, party hats.
+
+The cake, balloons, neon sign and banners have their own small editors under the item's toolbar (the
+cake's has eight styles, colours, toppers, up to 16 characters of writing, and candles that match the
+age or are number candles, sparklers, or none — and it still blows out and relights).
+
+**Zones.** Each item belongs to a zone — floor, wall, ceiling, tabletop or anywhere — and can only be
+placed in it (a rug can't go on the ceiling). The server enforces this for everyone except the host.
+The host can switch **Place anywhere** on to ignore zones.
+
+**Moving and resizing.**
+- *Move*: drag it. *Resize*: drag a corner handle, use **Scale −/+**, or pinch with two fingers on a
+  phone. By default sizes step through whole numbers (¼, ½, 1, 2, 3, 4×) so the pixel art stays crisp;
+  turn on **Free scale** for any size. The bounds are set by `NEXT_PUBLIC_MIN/MAX_OBJECT_SCALE`.
+- *Also*: flip, rotate 90°, forward/backward, lock (only the host can move a locked item), hide,
+  duplicate, delete, and **Snap to grid** (16 px).
+- **Undo/redo** (the buttons or Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z) covers every edit, presents included.
+  Undoing is an ordinary edit sent to the server, so if your right to make it has since been
+  withdrawn, it's refused and explained rather than silently ignored.
+
+| Key | Does |
+|---|---|
+| Arrow keys | nudge the selected item 1 px (Shift: 10 px; with Snap on: one grid cell) |
+| Delete / Backspace | delete the selected item |
+| Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z | undo, redo |
+| Ctrl/Cmd+D | duplicate |
+| Escape | deselect |
+
+The host can also **Reset to default layout** (Permissions tab), which restores the original room.
+
+**Your own pictures — Draw & Import.**
+- *Import* a PNG or WebP (drag it in, or click). Files are checked by their contents, not their
+  name; the limit is 512 KB and 512×512 px (larger images are scaled down with nearest-neighbor).
+  Transparent margins are trimmed, and **Pixelate to match room** shrinks a photo to 16–128 px wide
+  with an optional 16/32-colour palette, with a live preview. Metadata is stripped on your device
+  *and* again on the server.
+- *Draw* pixel art on a 16, 32, 64 or 128 px canvas: pencil, eraser, fill, eyedropper, line,
+  rectangle, ellipse, mirror, the room palette plus custom and recent colours, zoom, grid, undo/redo,
+  flip/rotate, and previews at real size and as placed in the room. Mouse, pen and touch all work.
+- Everything you save lands in **My items** (up to 40): place a copy as many times as you like, edit
+  it later (all placed copies follow), or open an imported PNG in the editor to touch it up.
+  Deleting an item asks first and removes every placed copy.
+
+> **Decorations are visible to anyone with the room link — even before the password in the exported
+> site.** Custom images are ordinary files in the export. Don't import private photos, and don't put
+> secrets in a sign, banner or cake. Anything private belongs inside a present.
+
+**Presents.** The **Presents** tab lists every present. In edit mode you can select one (or click it
+in the room), drag it, resize it (0.5–3×, `NEXT_PUBLIC_MIN/MAX_PRESENT_SCALE`) and move it forward or
+back. Only its position, size and layer can change — what's inside stays sealed and the birthday lock
+is untouched. The box designer also has a **Small / Medium / Large** size.
+
+**Several gifts in one box.** When packing, **Add another gift to this box** (up to 6,
+`NEXT_PUBLIC_MAX_GIFTS_PER_BOX`). Each gift gets a label ("Open me first!"), its own wrap design and
+its own goodies (all ten types); the per-box goodie and size limits count the whole box. Tick **Open
+in order** to make the celebrant open them one after another. On the big day the celebrant opens the
+outer box, the gifts float out with their wraps and labels, and each opens to its goodies — with an
+"N of M gifts opened" counter and an **Open everything** button. A box with one gift works exactly as
+it always did.
+
+## Permissions
+
+The host's link can do everything, always. Everyone else's rights are decided by the host in the
+**Permissions** tab, and — importantly — **enforced by the server on every change**. Hiding the
+pencil in the page is only a convenience; a person who skips the page and calls the server directly
+is refused just the same.
+
+| | Host | Contributor | Celebrant |
+|---|---|---|---|
+| Edit the room (add/move/resize/delete objects) | always | only if **Can decorate** is *Own items only* or *Any item* | only if **Can rearrange** is on **and** the room has unlocked — and then move/resize only, never add or delete |
+| Import images / draw | always | only with **Can import PNGs** / **Can draw** | never |
+| Move and resize presents | always | only their own, only with **Can move own presents** | never |
+| Items per person | — | capped by **Max items per contributor** (default 10) | — |
+| Place outside an item's zone | with "Place anywhere" | never | never |
+| Reset to default layout, change permissions | yes | no | no |
+
+Also: **Freeze layout** stops everyone except the host from changing anything. A **locked** item can
+only be moved by the host. Rooms hold at most 300 objects (`NEXT_PUBLIC_MAX_OBJECTS_PER_ROOM`).
+
+**"Own items" is per browser, not per person.** Contributors have no accounts. The first time a link is
+used, that browser gets a random token; only a hash of it is stored, and it decides which items and
+presents are "yours". The catch: clearing your browser data (or using another device) loses your claim
+on what you added. The host can always edit or delete anything, so nothing is ever stuck.
 
 ## Static export: `npm run export:gift`
 
@@ -184,6 +307,17 @@ sealed present from "A friend" until the password is entered. The countdown to t
 shown in the exported page is decoration only — **the password is the only real lock**. Choose one
 you're comfortable sharing with the celebrant through a separate channel than the link itself
 (`scripts/export-gift.ts` requires at least 12 characters and rejects common/low-entropy ones).
+
+**What else the export carries.** The room exactly as you left it: every visible decoration (position,
+size, layer, flip, and the cake's style, text and candles), and the custom images you *placed* — those
+are plain image files in `custom/` (unused library items never ship), so they are **not** encrypted.
+Present sizes and stacking are baked in too. A multi-gift box keeps its structure — gift labels, wrap
+designs, order and "open in order" — *inside* that box's encrypted blob, so none of it is readable
+without the password, and the gifts open in the same floating-gifts flow. The exported page has no edit
+mode and never talks to a server. The room is still alive — the cake blows out, picture frames
+enlarge, the photobooth works (all three are covered by tests; the rest of the scene runs on the same
+code as the live room). Passwords, link tokens, permissions and who-added-what are never
+exported.
 
 The exported folder also ships a `robots.txt` that disallows everything and a `noindex` meta tag,
 since — like the live app's room links — it's meant to be unlisted, shared only with people you

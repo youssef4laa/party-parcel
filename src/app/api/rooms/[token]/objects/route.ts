@@ -8,6 +8,8 @@ import { isRoomUnlocked } from '@/server/lock';
 import { canMutateObjects, parsePermissions } from '@/server/permissions';
 import { CreateObjectSchema, resolveRoomObjects } from '@/server/roomObjects';
 import { LIMITS } from '@/config/limits';
+import { OBJECT_CATALOG } from '@/room/objectCatalog';
+import { inZone } from '@/room/zones';
 
 /** Every room object mutation route hashes this the same way — a session's raw token is never
  * stored, only its hash, matching how a box's delete token works. */
@@ -49,6 +51,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
 
   const sessionHash = sessionHashFrom(req);
 
+  // Zones (docs/ROOM_EDITOR.md 1b): only the host may place an item outside its zone ("place
+  // anywhere"). For everyone else the item's zone is the catalog's, NOT whatever the request claims
+  // — otherwise asking for zone "anywhere" would make the limit meaningless — and its position must
+  // fall inside it.
+  const zone = role === 'admin' ? parsed.data.zone : (OBJECT_CATALOG[parsed.data.kind]?.defaultZone ?? 'anywhere');
+  if (role !== 'admin' && !inZone(zone, parsed.data.x, parsed.data.y)) {
+    return jsonError(400, `That spot isn't valid for a ${zone} item.`);
+  }
+
   // A custom object must point at an item in THIS room's library — never another room's, and never
   // a made-up id (the FK alone would only catch the latter, and by throwing a 500).
   if (parsed.data.assetId) {
@@ -81,7 +92,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
       scale: parsed.data.scale ?? 1,
       flipX: parsed.data.flipX ?? false,
       rotation: parsed.data.rotation ?? 0,
-      zone: parsed.data.zone,
+      zone,
       configJson: parsed.data.configJson ?? '{}',
       assetId: parsed.data.assetId ?? null,
       createdByRole: role,

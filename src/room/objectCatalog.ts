@@ -30,7 +30,9 @@ const catalog: CatalogEntry[] = [
   // item" catalog since a fresh room already has one of each (see defaultLayout.ts) — a host who
   // deletes one can still bring it back via "Reset to default layout".
   { key: 'window', label: 'Window', category: 'scenery', defaultZone: 'wall', hiddenFromCatalog: true },
-  { key: 'banner', label: 'Banner', category: 'scenery', defaultZone: 'ceiling', configurable: true },
+  // The room's own "HAPPY BIRTHDAY!" banner: its text comes from the room, not from this object, so a
+  // second copy would just repeat it. Extra banners with their OWN words are the `banner-text` kind below.
+  { key: 'banner', label: 'Banner', category: 'scenery', defaultZone: 'ceiling', hiddenFromCatalog: true },
   { key: 'garland', label: 'Garland', category: 'scenery', defaultZone: 'ceiling', hiddenFromCatalog: true },
   { key: 'lantern', label: 'Paper lantern (ceiling)', category: 'scenery', defaultZone: 'ceiling', hiddenFromCatalog: true },
   { key: 'curtain-left', label: 'Curtain (left)', category: 'scenery', defaultZone: 'wall', hiddenFromCatalog: true },
@@ -62,11 +64,21 @@ const catalog: CatalogEntry[] = [
   { key: 'bookshelf', label: 'Bookshelf', category: 'furniture', defaultZone: 'wall' },
   { key: 'side-table', label: 'Side table', category: 'furniture', defaultZone: 'floor' },
   { key: 'bean-bag', label: 'Bean bag', category: 'furniture', defaultZone: 'floor' },
+  { key: 'dresser', label: 'Dresser', category: 'furniture', defaultZone: 'floor' },
+  { key: 'bench', label: 'Bench', category: 'furniture', defaultZone: 'floor' },
+  { key: 'cushions', label: 'Cushions', category: 'furniture', defaultZone: 'anywhere' },
+  { key: 'rug-round', label: 'Rug (round, small)', category: 'furniture', defaultZone: 'floor' },
+  { key: 'rug-stripes', label: 'Rug (striped, medium)', category: 'furniture', defaultZone: 'floor' },
+  { key: 'rug-checker', label: 'Rug (checkered, large)', category: 'furniture', defaultZone: 'floor' },
+  { key: 'rug-runner', label: 'Rug (runner, long)', category: 'furniture', defaultZone: 'floor' },
 
   // --- Plants and trees (Phase 1c) ---
   { key: 'potted-plant', label: 'Potted plant', category: 'plants', defaultZone: 'anywhere' },
   { key: 'tall-tree', label: 'Tall indoor tree', category: 'plants', defaultZone: 'floor' },
   { key: 'pine-tree', label: 'Pine tree', category: 'plants', defaultZone: 'floor' },
+  { key: 'palm', label: 'Palm tree', category: 'plants', defaultZone: 'floor' },
+  { key: 'flower-pots', label: 'Flower pots', category: 'plants', defaultZone: 'anywhere' },
+  { key: 'hanging-plant', label: 'Hanging plant', category: 'plants', defaultZone: 'ceiling' },
 
   // --- Lights (Phase 1c) ---
   { key: 'string-lights', label: 'String lights', category: 'lights', defaultZone: 'ceiling' },
@@ -75,12 +87,19 @@ const catalog: CatalogEntry[] = [
   { key: 'table-lamp', label: 'Table lamp', category: 'lights', defaultZone: 'tabletop' },
   { key: 'disco-ball', label: 'Disco ball', category: 'lights', defaultZone: 'ceiling' },
   { key: 'neon-sign', label: 'Neon sign', category: 'lights', defaultZone: 'wall', configurable: true },
+  { key: 'candles', label: 'Candles', category: 'lights', defaultZone: 'tabletop' },
+  { key: 'spotlight', label: 'Spotlight', category: 'lights', defaultZone: 'ceiling' },
 
   // --- Party decor (Phase 1c) ---
   { key: 'streamers', label: 'Streamers', category: 'decor', defaultZone: 'ceiling' },
   { key: 'balloon-cluster', label: 'Balloon cluster', category: 'decor', defaultZone: 'anywhere' },
   { key: 'pinata', label: 'Piñata', category: 'decor', defaultZone: 'ceiling' },
   { key: 'party-hat', label: 'Party hat', category: 'decor', defaultZone: 'anywhere' },
+  { key: 'banner-text', label: 'Banner (your words)', category: 'decor', defaultZone: 'ceiling', configurable: true },
+  { key: 'confetti', label: 'Confetti', category: 'decor', defaultZone: 'anywhere' },
+  { key: 'poster', label: 'Poster (star)', category: 'decor', defaultZone: 'wall' },
+  { key: 'poster-cake', label: 'Poster (cake)', category: 'decor', defaultZone: 'wall' },
+  { key: 'photo-string', label: 'Photo string', category: 'decor', defaultZone: 'wall' },
 ];
 
 export const OBJECT_CATALOG: Record<string, CatalogEntry> = Object.fromEntries(catalog.map((e) => [e.key, e]));

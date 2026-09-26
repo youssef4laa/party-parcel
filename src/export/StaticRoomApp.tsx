@@ -1,9 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import RoomCanvas, { type RoomCanvasHandle } from '@/room/RoomCanvas';
 import BoxOpenAnimation from '@/box/BoxOpenAnimation';
 import GoodieUnwrapFlow from '@/goodies/GoodieUnwrapFlow';
+import GiftsFlow from '@/goodies/GiftsFlow';
+import type { ContentsGift } from '@/room/api';
 import type { ViewerGoodie } from '@/goodies/viewers';
 import type { RoomDataSource } from '@/room/dataSource';
 import type { PlacedBox } from '@/contribute/types';
@@ -13,6 +15,7 @@ import { addLocalPhotoboothShot, listLocalPhotoboothShots, removeLocalPhotobooth
 import CountdownBadge from './CountdownBadge';
 import PasswordPrompt from './PasswordPrompt';
 import type { StaticBoxSecret, StaticManifest } from './manifest';
+import { toRoomObjectApi } from './staticObjects';
 
 /** One exported bundle is always exactly one room, so a fixed namespace is enough — see the
  * "known gap" note in DECISIONS.md about why shots taken *before* export aren't carried over. */
@@ -29,6 +32,9 @@ type OpenState = {
   design: PlacedBox['design'];
   fromName: string;
   goodies: ViewerGoodie[];
+  /** Only for a box with several gifts (Phase 4b) — decrypted from the box's own blob. */
+  gifts?: ContentsGift[];
+  openInOrder?: boolean;
 };
 
 export default function StaticRoomApp() {
@@ -52,6 +58,13 @@ export default function StaticRoomApp() {
       .catch((e) => setLoadError(e instanceof Error ? e.message : 'Could not load this room.'));
   }, []);
 
+  // Stable references: RoomCanvas rebuilds its whole scene if these change identity.
+  const staticObjects = useMemo(() => manifest?.objects?.map(toRoomObjectApi), [manifest]);
+  const staticCustomItems = useMemo(
+    () => manifest?.customItems?.map((c) => ({ id: c.id, url: c.file })),
+    [manifest],
+  );
+
   const dataSource: RoomDataSource | null = manifest
     ? {
         async list() {
@@ -64,6 +77,8 @@ export default function StaticRoomApp() {
             x: b.x,
             y: b.y,
             placedAt: Date.parse(b.placedAt),
+            scale: b.scale ?? 1,
+            z: b.z ?? 0,
           }));
         },
         async create() {
@@ -92,7 +107,7 @@ export default function StaticRoomApp() {
    * Throws on wrong password (AES-GCM auth tag failure) — callers must not show anything if this
    * rejects. */
   const decryptBox = useCallback(
-    async (boxMeta: StaticManifest['boxes'][number], activeKey: CryptoKey): Promise<{ fromName: string; goodies: ViewerGoodie[] }> => {
+    async (boxMeta: StaticManifest['boxes'][number], activeKey: CryptoKey): Promise<Omit<OpenState, 'boxId' | 'design'>> => {
       const goodiesBuf = await fetch(boxMeta.goodiesFile).then((r) => r.arrayBuffer());
       const secret = await decryptJson<StaticBoxSecret>(activeKey, goodiesBuf);
 
@@ -109,7 +124,19 @@ export default function StaticRoomApp() {
           return { ...g, assetUrls, redeemedAt: local ?? (g.redeemedAt as string | null) } as ViewerGoodie;
         }),
       );
-      return { fromName: secret.fromName, goodies };
+      // Regroup the flat, decrypted goodies into their gifts (a multi-gift box only).
+      let gifts: ContentsGift[] | undefined;
+      if (secret.gifts && secret.gifts.length > 1) {
+        const byId = new Map(goodies.map((g) => [g.id, g]));
+        gifts = secret.gifts.map((g) => ({
+          id: g.id,
+          label: g.label,
+          design: g.design,
+          sortOrder: g.sortOrder,
+          goodies: g.goodieIds.flatMap((id) => (byId.has(id) ? [byId.get(id)!] : [])) as unknown as ContentsGift['goodies'],
+        }));
+      }
+      return { fromName: secret.fromName, goodies, gifts, openInOrder: secret.openInOrder === true };
     },
     [],
   );
@@ -122,8 +149,8 @@ export default function StaticRoomApp() {
 
       if (key) {
         try {
-          const { fromName, goodies } = await decryptBox(boxMeta, key);
-          setOpenBox({ boxId: boxMeta.id, design: boxMeta.design, fromName, goodies });
+          const opened = await decryptBox(boxMeta, key);
+          setOpenBox({ boxId: boxMeta.id, design: boxMeta.design, ...opened });
           setUnwrapping(false);
           return;
         } catch {
@@ -146,9 +173,9 @@ export default function StaticRoomApp() {
     setPasswordError(null);
     try {
       const candidateKey = await deriveKey(password, manifest.kdf.salt);
-      const { fromName, goodies } = await decryptBox(boxMeta, candidateKey);
+      const opened = await decryptBox(boxMeta, candidateKey);
       setKey(candidateKey); // only cache once we've proven it actually decrypts something
-      setOpenBox({ boxId: boxMeta.id, design: boxMeta.design, fromName, goodies });
+      setOpenBox({ boxId: boxMeta.id, design: boxMeta.design, ...opened });
       setUnwrapping(false);
       setPendingBoxId(null);
     } catch {
@@ -162,6 +189,12 @@ export default function StaticRoomApp() {
     const redeemedAt = setLocalRedemption(goodieId);
     return { redeemedAt };
   }
+
+  const finishOpening = () => {
+    if (openBox) handleRef.current?.markBoxOpened(openBox.boxId);
+    setUnwrapping(false);
+    setOpenBox(null);
+  };
 
   if (loadError) {
     return (
@@ -185,6 +218,8 @@ export default function StaticRoomApp() {
         canContribute={false}
         onBoxClick={handleBoxClick}
         handleRef={handleRef}
+        staticObjects={staticObjects}
+        staticCustomItems={staticCustomItems}
       />
 
       <CountdownBadge eventAt={manifest.room.eventAt} />
@@ -207,18 +242,25 @@ export default function StaticRoomApp() {
         />
       )}
 
-      {openBox && unwrapping && (
+      {openBox && unwrapping && openBox.gifts && (
+        <GiftsFlow
+          gifts={openBox.gifts}
+          boxId={openBox.boxId}
+          celebrateToken=""
+          fromName={openBox.fromName}
+          openInOrder={openBox.openInOrder === true}
+          onRedeem={handleRedeem}
+          onDone={finishOpening}
+        />
+      )}
+      {openBox && unwrapping && !openBox.gifts && (
         <GoodieUnwrapFlow
           goodies={openBox.goodies}
           boxId={openBox.boxId}
           celebrateToken=""
           fromName={openBox.fromName}
           onRedeem={handleRedeem}
-          onDone={() => {
-            handleRef.current?.markBoxOpened(openBox.boxId);
-            setUnwrapping(false);
-            setOpenBox(null);
-          }}
+          onDone={finishOpening}
         />
       )}
     </div>

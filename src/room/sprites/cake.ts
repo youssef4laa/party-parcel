@@ -1,5 +1,5 @@
 import type { PixelCtx } from '../draw/pixelCanvas';
-import { createPixelCanvas } from '../draw/pixelCanvas';
+import { createPixelCanvas, fitPixelFont } from '../draw/pixelCanvas';
 import { palette as p } from '../draw/palette';
 import { DEFAULT_CAKE_CONFIG, CAKE_TEXT_MAX_LEN, type CakeConfig, type CakeStyle, type CakeTopper } from '../cakeConfig';
 
@@ -364,7 +364,11 @@ export function drawCake(lit: boolean, config: CakeConfig = DEFAULT_CAKE_CONFIG)
     const plaqueY = 48;
     g.px(2, plaqueY, GRID_W - 4, 8, p.cream);
     g.pborder(2, plaqueY, GRID_W - 4, 8, p.outline);
-    g.text(CX, plaqueY + 2, config.text.slice(0, CAKE_TEXT_MAX_LEN).toUpperCase(), p.hotPinkDark, `${Math.floor(unit * 0.8)}px "Press Start 2P", monospace`, 'center');
+    const words = config.text.slice(0, CAKE_TEXT_MAX_LEN).toUpperCase();
+    // Sized to the plaque (36 x 8 art pixels): 16 characters still fit at an 8px glyph, a short
+    // word gets bigger. It used to be a fixed 3px font, too small to read at any length.
+    const fs = fitPixelFont(words.length, (GRID_W - 6) * unit, 5 * unit);
+    g.text(CX, plaqueY + (8 * unit - fs) / 2 / unit, words, p.hotPinkDark, `${fs}px "Press Start 2P", monospace`, 'center');
   }
 
   return g.canvas;

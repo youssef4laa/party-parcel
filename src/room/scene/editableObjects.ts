@@ -1,6 +1,7 @@
 import { Container, FederatedPointerEvent, Graphics, Sprite, Ticker } from 'pixi.js';
 import { getTexture, anchorFor, manifestKeyFor, dynamicTextureFor } from './objectSprites';
 import { parseObjectConfig } from './objectConfig';
+import { buildGlows, relayoutGlows } from './lightGlow';
 import type { DragState } from './camera';
 
 export type RoomObjectData = {
@@ -46,6 +47,9 @@ export function isLegacyKind(kind: string): boolean {
 const AMBIENT_ALPHA_TWINKLE_KINDS = new Set(['string-lights']);
 
 const BASE_UNIT_PX = 4; // matches every sprite's own `unit` — used for the selection outline only
+const HANDLE_PX = 14; // on-screen-ish size of a corner resize handle, in world px
+const MIN_LIVE_SCALE = 0.1; // while dragging a handle / pinching, before the value is snapped and saved
+const MAX_LIVE_SCALE = 8;
 
 /** Per-node mutable state the persistent pointer handlers read from — kept OUTSIDE the handler
  * closures deliberately (see the comment on `applyInteractivity` for why: rebuilding listeners
@@ -66,6 +70,15 @@ export class EditableObjectsLayer {
   private selectionBoxes = new Map<string, Graphics>();
   private nodeStates = new Map<string, NodeState>();
   private ambientTickers = new Map<string, (ticker: Ticker) => void>();
+  private handles = new Map<string, Container>();
+  private glows = new Map<string, Sprite[]>();
+  private selectedId: string | null = null;
+  private interactive = false;
+  /** A corner handle being dragged: scale follows the pointer's distance from the object's anchor. */
+  private resize: { id: string; startDist: number; startScale: number; node: Container } | null = null;
+  /** A two-finger pinch on the selected object. */
+  private pinch: { id: string; startDist: number; startScale: number; node: Container } | null = null;
+  private pinchCleanup: (() => void) | null = null;
 
   constructor(
     world: Container,
@@ -74,6 +87,11 @@ export class EditableObjectsLayer {
     private ticker: Ticker,
     private onSelect: (id: string | null) => void,
     private onDragEnd: (id: string, x: number, y: number) => void,
+    /** A corner-handle drag or a pinch finished: the RAW (unsnapped) scale the object ended at. The
+     * owner snaps it (crisp integer steps unless free-scale is on), clamps it, and saves it. */
+    private onResizeEnd: (id: string, rawScale: number) => void = () => {},
+    /** Pinching needs the camera's own one-finger pan switched off for the duration. */
+    private suspendCamera: (suspended: boolean) => void = () => {},
   ) {
     this.container.sortableChildren = true;
     world.addChild(this.container);
@@ -87,6 +105,8 @@ export class EditableObjectsLayer {
    * full interactive/animated behavior. In edit mode, every non-hidden kind (legacy included)
    * renders here as a plain draggable node. See the LEGACY_KINDS comment above. */
   setObjects(objects: RoomObjectData[], editMode: boolean, selectedId: string | null, interactive: boolean = editMode) {
+    this.selectedId = selectedId;
+    this.interactive = interactive;
     const visible = objects.filter((o) => !o.hidden && (editMode || !isLegacyKind(o.kind)));
     const seen = new Set<string>();
 
@@ -113,7 +133,11 @@ export class EditableObjectsLayer {
           const dynamicTex = dynamicTextureFor(obj.kind, parseObjectConfig(obj.configJson), obj.assetId);
           if (dynamicTex) {
             const sprite = this.sprites.get(obj.id);
-            if (sprite) sprite.texture = dynamicTex;
+            if (sprite) {
+              sprite.texture = dynamicTex;
+              const glows = this.glows.get(obj.id);
+              if (glows) relayoutGlows(obj.kind, sprite, glows); // its size may have changed with the new text
+            }
           }
         }
         // A custom item's pixels change without ITS row changing at all (the library entry was
@@ -145,6 +169,8 @@ export class EditableObjectsLayer {
         this.nodes.delete(id);
         this.sprites.delete(id);
         this.selectionBoxes.delete(id);
+        this.handles.delete(id);
+        this.glows.delete(id);
         this.nodeStates.delete(id);
         const ambientFn = this.ambientTickers.get(id);
         if (ambientFn) {
@@ -165,11 +191,27 @@ export class EditableObjectsLayer {
     sprite.anchor.set(anchor.x, anchor.y);
     node.addChild(sprite);
     this.sprites.set(obj.id, sprite);
+    // Lights glow. The glow is a child of THIS node, so it shares the light's z-order (see lightGlow.ts).
+    const glows = buildGlows(obj.kind, sprite);
+    for (const glow of glows) node.addChild(glow);
+    if (glows.length) this.glows.set(obj.id, glows);
 
     const selectionBox = new Graphics();
     selectionBox.visible = false;
     node.addChild(selectionBox);
     this.drawSelectionBox(selectionBox, sprite);
+
+    const handles = new Container();
+    handles.visible = false;
+    for (let i = 0; i < 4; i++) {
+      const g = new Graphics();
+      g.eventMode = 'static';
+      g.cursor = i === 0 || i === 3 ? 'nwse-resize' : 'nesw-resize';
+      this.attachHandleEvents(g, obj.id);
+      handles.addChild(g);
+    }
+    node.addChild(handles);
+    this.handles.set(obj.id, handles);
 
     const state: NodeState = {
       obj,
@@ -205,7 +247,7 @@ export class EditableObjectsLayer {
     });
 
     node.on('pointerdown', (e: FederatedPointerEvent) => {
-      if (!state.editMode || state.obj.locked) return;
+      if (!state.editMode || state.obj.locked || this.pinch) return;
       state.dragging = true;
       state.startPointer = { x: e.global.x, y: e.global.y };
       state.startNode = { x: node.x, y: node.y };
@@ -255,11 +297,141 @@ export class EditableObjectsLayer {
   private applyStaticInteractivity(node: Container, obj: RoomObjectData, editMode: boolean, selected: boolean) {
     const selectionBox = this.selectionBoxes.get(obj.id);
     if (selectionBox) selectionBox.visible = selected;
+    this.updateHandles(obj, editMode && selected && !obj.locked);
     node.eventMode = editMode ? 'static' : 'none';
     node.cursor = editMode ? (obj.locked ? 'not-allowed' : 'grab') : 'default';
   }
 
+  /** Positions the four corner handles on the object's own bounds and keeps them a constant size on
+   * screen regardless of how much the object is scaled. */
+  private updateHandles(obj: RoomObjectData, show: boolean) {
+    const handles = this.handles.get(obj.id);
+    const sprite = this.sprites.get(obj.id);
+    if (!handles) return;
+    handles.visible = show;
+    if (!show || !sprite) return;
+    const w = sprite.width;
+    const h = sprite.height;
+    const x0 = -sprite.anchor.x * w;
+    const y0 = -sprite.anchor.y * h;
+    const size = HANDLE_PX / Math.max(Math.abs(obj.scale), 0.05);
+    const corners: Array<[number, number]> = [[x0, y0], [x0 + w, y0], [x0, y0 + h], [x0 + w, y0 + h]];
+    handles.children.forEach((child, i) => {
+      const g = child as Graphics;
+      g.clear();
+      g.rect(corners[i][0] - size / 2, corners[i][1] - size / 2, size, size).fill(0xffffff).stroke({ width: 2 / Math.max(Math.abs(obj.scale), 0.05), color: 0xff3d8b });
+    });
+  }
+
+  private attachHandleEvents(g: Graphics, id: string) {
+    g.on('pointerdown', (e: FederatedPointerEvent) => {
+      const node = this.nodes.get(id);
+      const state = this.nodeStates.get(id);
+      if (!node || !state || state.obj.locked) return;
+      e.stopPropagation(); // not a drag of the object, and not a camera pan
+      const p = this.container.toLocal(e.global);
+      const startDist = Math.hypot(p.x - node.x, p.y - node.y);
+      if (startDist < 1) return;
+      this.resize = { id, startDist, startScale: state.obj.scale, node };
+    });
+    g.on('globalpointermove', (e: FederatedPointerEvent) => {
+      const r = this.resize;
+      if (!r || r.id !== id) return;
+      const p = this.container.toLocal(e.global);
+      const raw = r.startScale * (Math.hypot(p.x - r.node.x, p.y - r.node.y) / r.startDist);
+      const scale = Math.min(MAX_LIVE_SCALE, Math.max(MIN_LIVE_SCALE, raw));
+      r.node.scale.set(r.node.scale.x < 0 ? -scale : scale, scale); // live preview; snapped + saved on release
+    });
+    const end = () => {
+      const r = this.resize;
+      if (!r || r.id !== id) return;
+      this.resize = null;
+      this.drag.wasDragging = true; // the release must not count as a tap that re-selects something
+      this.onResizeEnd(id, Math.abs(r.node.scale.y));
+    };
+    g.on('pointerup', end);
+    g.on('pointerupoutside', end);
+  }
+
+  /**
+   * Two-finger pinch resizes the SELECTED object (docs/ROOM_EDITOR.md 1b: touch — drag, pinch to
+   * resize). Listens on the canvas element directly for touch pointers only, so mouse behavior is
+   * untouched; the camera's one-finger pan is suspended for the gesture and any half-started drag
+   * of an object (the first finger usually lands on it) is cancelled.
+   */
+  enablePinch(canvas: HTMLCanvasElement) {
+    this.pinchCleanup?.();
+    const touches = new Map<number, { x: number; y: number }>();
+    const spread = () => {
+      const [a, b] = [...touches.values()];
+      return Math.hypot(a.x - b.x, a.y - b.y);
+    };
+    const down = (e: PointerEvent) => {
+      if (e.pointerType !== 'touch') return;
+      touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (touches.size === 2) this.startPinch(spread());
+    };
+    const move = (e: PointerEvent) => {
+      if (!touches.has(e.pointerId)) return;
+      touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (this.pinch && touches.size >= 2) this.updatePinch(spread());
+    };
+    const up = (e: PointerEvent) => {
+      if (!touches.delete(e.pointerId)) return;
+      if (this.pinch && touches.size < 2) this.endPinch();
+    };
+    canvas.addEventListener('pointerdown', down);
+    canvas.addEventListener('pointermove', move);
+    canvas.addEventListener('pointerup', up);
+    canvas.addEventListener('pointercancel', up);
+    this.pinchCleanup = () => {
+      canvas.removeEventListener('pointerdown', down);
+      canvas.removeEventListener('pointermove', move);
+      canvas.removeEventListener('pointerup', up);
+      canvas.removeEventListener('pointercancel', up);
+    };
+  }
+
+  private startPinch(distance: number) {
+    const id = this.selectedId;
+    if (!id || !this.interactive || distance < 10) return;
+    const node = this.nodes.get(id);
+    const state = this.nodeStates.get(id);
+    if (!node || !state || state.obj.locked) return;
+    // The first finger usually landed on the object and began dragging it — undo that.
+    for (const [nodeId, st] of this.nodeStates) {
+      if (!st.dragging) continue;
+      st.dragging = false;
+      this.nodes.get(nodeId)?.position.set(st.startNode.x, st.startNode.y);
+    }
+    this.resize = null;
+    this.drag.active = false;
+    this.drag.wasDragging = true;
+    this.suspendCamera(true);
+    this.pinch = { id, startDist: distance, startScale: state.obj.scale, node };
+  }
+
+  private updatePinch(distance: number) {
+    const p = this.pinch;
+    if (!p) return;
+    const scale = Math.min(MAX_LIVE_SCALE, Math.max(MIN_LIVE_SCALE, p.startScale * (distance / p.startDist)));
+    p.node.scale.set(p.node.scale.x < 0 ? -scale : scale, scale);
+  }
+
+  private endPinch() {
+    const p = this.pinch;
+    if (!p) return;
+    this.pinch = null;
+    this.suspendCamera(false);
+    this.drag.wasDragging = true;
+    this.onResizeEnd(p.id, Math.abs(p.node.scale.y));
+  }
+
   destroy() {
+    this.pinchCleanup?.();
+    this.pinchCleanup = null;
+    this.handles.clear();
+    this.glows.clear();
     for (const fn of this.ambientTickers.values()) this.ticker.remove(fn);
     this.ambientTickers.clear();
     this.container.destroy({ children: true });

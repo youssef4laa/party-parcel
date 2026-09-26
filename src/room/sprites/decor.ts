@@ -1,4 +1,4 @@
-import { createPixelCanvas } from '../draw/pixelCanvas';
+import { createPixelCanvas, fitPixelFont } from '../draw/pixelCanvas';
 import { palette as p } from '../draw/palette';
 
 /**
@@ -148,11 +148,18 @@ export function drawDiscoBall() {
   return g.canvas;
 }
 
+/** The sign's words, sized to fill the tube area (up to 16 characters) and centred in it. The font
+ * used to be a fixed 3px, which was unreadable at any length. */
+function drawNeonWords(g: ReturnType<typeof createPixelCanvas>, words: string) {
+  const fs = fitPixelFont(words.length, 34 * unit, 6 * unit);
+  g.text(20, (12 * unit - fs) / 2 / unit, words, '#ff4fd8', `${fs}px "Press Start 2P", monospace`, 'center');
+}
+
 export function drawNeonSign() {
   const g = createPixelCanvas(40, 12, unit);
   g.pborder(0, 0, 40, 12, '#3a1a4a');
   g.px(2, 2, 36, 8, '#1a0a2a');
-  g.text(20, 5, 'PARTY', '#ff4fd8', `${Math.floor(unit * 0.9)}px "Press Start 2P", monospace`, 'center');
+  drawNeonWords(g, 'PARTY');
   return g.canvas;
 }
 
@@ -163,7 +170,7 @@ export function drawNeonSignText(text: string) {
   const g = createPixelCanvas(40, 12, unit);
   g.pborder(0, 0, 40, 12, '#3a1a4a');
   g.px(2, 2, 36, 8, '#1a0a2a');
-  g.text(20, 5, text.slice(0, 16).toUpperCase() || 'PARTY', '#ff4fd8', `${Math.floor(unit * 0.8)}px "Press Start 2P", monospace`, 'center');
+  drawNeonWords(g, text.slice(0, 16).toUpperCase() || 'PARTY');
   return g.canvas;
 }
 

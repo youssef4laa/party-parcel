@@ -64,3 +64,12 @@ export function createPixelCanvas(gridW: number, gridH: number, unit = 4): Pixel
 
   return { canvas, ctx, gridW, gridH, unit, px, pcircle, pborder, text };
 }
+
+/**
+ * A font size (px) for the pixel font ("Press Start 2P", whose glyphs are exactly 1em wide) that
+ * makes `chars` characters fit in `maxWidthPx`, capped at `maxPx` so a short word doesn't balloon and
+ * floored at 6px so a long one stays a recognizable letter rather than a smudge.
+ */
+export function fitPixelFont(chars: number, maxWidthPx: number, maxPx: number): number {
+  return Math.max(6, Math.min(maxPx, Math.floor(maxWidthPx / Math.max(1, chars))));
+}

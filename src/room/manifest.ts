@@ -33,6 +33,11 @@ import {
   drawPinata,
   drawPartyHat,
 } from './sprites/decor';
+import {
+  drawDresser, drawBench, drawCushions, drawRugRound, drawRugStripes, drawRugChecker, drawRugRunner,
+  drawPalm, drawFlowerPots, drawHangingPlant, drawCandles, drawSpotlight, drawConfetti, drawPoster,
+  drawPosterCake, drawPhotoString,
+} from './sprites/catalogExtras';
 
 /**
  * Sprite manifest: every sprite the room can render, resolved today by a
@@ -88,6 +93,24 @@ const registry: Record<string, DrawFn> = {
   'balloon-cluster': drawBalloonCluster,
   pinata: drawPinata,
   'party-hat': drawPartyHat,
+
+  // The remainder of the 1c catalog (sprites/catalogExtras.ts)
+  dresser: drawDresser,
+  bench: drawBench,
+  cushions: drawCushions,
+  'rug-round': drawRugRound,
+  'rug-stripes': drawRugStripes,
+  'rug-checker': drawRugChecker,
+  'rug-runner': drawRugRunner,
+  palm: drawPalm,
+  'flower-pots': drawFlowerPots,
+  'hanging-plant': drawHangingPlant,
+  candles: drawCandles,
+  spotlight: drawSpotlight,
+  confetti: drawConfetti,
+  poster: drawPoster,
+  'poster-cake': drawPosterCake,
+  'photo-string': drawPhotoString,
 };
 
 const balloonColors: BalloonColor[] = ['purple', 'red', 'green', 'yellow', 'orange', 'pink'];

@@ -235,6 +235,10 @@ export default function PixelEditor({
     const canvas = canvasRef.current;
     if (!canvas) return;
     e.preventDefault();
+    // preventDefault also suppresses the browser's usual "clicking elsewhere moves focus" behavior, so
+    // after using the colour picker or the name field, focus would stay in that form control while you
+    // draw — and Ctrl+Z (rightly ignored inside text fields) would do nothing. Release it.
+    if (document.activeElement instanceof HTMLElement && document.activeElement !== document.body) document.activeElement.blur();
     canvas.setPointerCapture(e.pointerId);
     const cell = cellAt(canvas, bmpRef.current, e.clientX, e.clientY);
 
@@ -303,17 +307,31 @@ export default function PixelEditor({
     bump();
   };
 
-  const onKeyDown = (e: React.KeyboardEvent) => {
-    const mod = e.metaKey || e.ctrlKey;
-    if (mod && e.key.toLowerCase() === 'z') {
-      e.preventDefault();
-      if (e.shiftKey) redo();
-      else undo();
-    } else if (mod && e.key.toLowerCase() === 'y') {
-      e.preventDefault();
-      redo();
-    }
-  };
+  // Undo/redo shortcuts while the editor is open. Listening on the WINDOW (not the editor's own
+  // element) is deliberate: clicking the drawing canvas, or a button that then becomes disabled, moves
+  // keyboard focus to the page body, so an element-level handler silently stopped working mid-stroke.
+  // Text fields are skipped (Ctrl+Z there means "undo my typing"), and the event is stopped here so it
+  // can never also reach the room's own undo behind this editor.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)) return;
+      const mod = e.metaKey || e.ctrlKey;
+      const key = e.key.toLowerCase();
+      if (mod && key === 'z') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.shiftKey) redo();
+        else undo();
+      } else if (mod && key === 'y') {
+        e.preventDefault();
+        e.stopPropagation();
+        redo();
+      }
+    };
+    window.addEventListener('keydown', onKey, true); // capture: runs before the room's handler
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [undo, redo]);
 
   const save = async (asNew: boolean) => {
     setError(null);
@@ -339,7 +357,7 @@ export default function PixelEditor({
   };
 
   return (
-    <div className="flex flex-col gap-2" onKeyDown={onKeyDown} data-testid="pixel-editor">
+    <div className="flex flex-col gap-2" data-testid="pixel-editor" data-own-shortcuts>
       <div className="flex flex-wrap gap-1" role="toolbar" aria-label="Drawing tools">
         {TOOLS.map((t) => (
           <button key={t.key} type="button" title={t.hint} aria-pressed={tool === t.key} className={btn(tool === t.key)} onClick={() => setTool(t.key)}>

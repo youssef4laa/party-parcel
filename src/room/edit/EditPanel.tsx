@@ -6,6 +6,7 @@ import type { CustomItemApi, PresentPatch, RoomObjectApi, RoomObjectPatch, RoomP
 import type { PlacedBox } from '@/contribute/types';
 import { LIMITS } from '@/config/limits';
 import CakeEditor from './CakeEditor';
+import DecorEditor, { hasDecorEditor } from './DecorEditor';
 import DrawImportTab from './DrawImportTab';
 import MyItems from './MyItems';
 
@@ -17,6 +18,11 @@ const CATEGORIES: { key: CatalogCategory; label: string }[] = [
   { key: 'lights', label: 'Lights' },
   { key: 'decor', label: 'Party decor' },
 ];
+
+const toolButtonClass = (active: boolean) =>
+  `border-2 px-1.5 py-0.5 font-mono text-[11px] disabled:opacity-40 ${
+    active ? 'border-[#ff3d8b] bg-[#ff3d8b] text-[#fff6d5]' : 'border-[#5e3620] bg-[#fff6d5] text-[#5e3620]'
+  }`;
 
 const tabButtonClass = (active: boolean) =>
   `flex-1 border-2 px-2 py-1.5 font-mono text-xs ${
@@ -47,6 +53,18 @@ export default function EditPanel({
   onSelectPresent,
   onUpdatePresent,
   canMovePresent,
+  canUndo,
+  canRedo,
+  onUndo,
+  onRedo,
+  snapOn,
+  onToggleSnap,
+  freeScale,
+  onToggleFreeScale,
+  placeAnywhere,
+  onTogglePlaceAnywhere,
+  onStepScale,
+  onDuplicate,
 }: {
   capabilities: string[];
   objects: RoomObjectApi[];
@@ -76,6 +94,21 @@ export default function EditPanel({
   onUpdatePresent: (patch: PresentPatch) => void;
   /** Display hint for whether THIS browser may move a given present (the server re-checks). */
   canMovePresent: (box: PlacedBox) => boolean;
+  /** Undo/redo of every edit made in this session (docs/ROOM_EDITOR.md 1b). */
+  canUndo: boolean;
+  canRedo: boolean;
+  onUndo: () => void;
+  onRedo: () => void;
+  snapOn: boolean;
+  onToggleSnap: () => void;
+  /** Off by default: scale moves in whole-number steps so pixels stay crisp. */
+  freeScale: boolean;
+  onToggleFreeScale: () => void;
+  /** Host only (`onTogglePlaceAnywhere` is undefined for everyone else): lifts the zone limit. */
+  placeAnywhere: boolean;
+  onTogglePlaceAnywhere?: () => void;
+  onStepScale: (dir: 1 | -1) => void;
+  onDuplicate: () => void;
 }) {
   // Someone who may only move presents (no room-object rights) gets just the Presents tab — the
   // catalog, library and layers would be buttons that the server refuses.
@@ -93,6 +126,42 @@ export default function EditPanel({
         <button type="button" onClick={onClose} aria-label="Close edit panel" className="font-mono text-sm text-[#5e3620]">
           ✕
         </button>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-1 border-b-2 border-[#e0b8c8] px-2 py-1.5" role="toolbar" aria-label="Edit tools">
+        <button type="button" onClick={onUndo} disabled={!canUndo} aria-label="Undo" title="Undo (Ctrl/Cmd+Z)" className={toolButtonClass(false)}>
+          ↶ Undo
+        </button>
+        <button type="button" onClick={onRedo} disabled={!canRedo} aria-label="Redo" title="Redo (Ctrl/Cmd+Shift+Z)" className={toolButtonClass(false)}>
+          ↷ Redo
+        </button>
+        {canEditObjects && (
+          <>
+            <button type="button" onClick={onToggleSnap} aria-pressed={snapOn} title="Snap moves to a 16px grid" className={toolButtonClass(snapOn)}>
+              Snap to grid
+            </button>
+            <button
+              type="button"
+              onClick={onToggleFreeScale}
+              aria-pressed={freeScale}
+              title="Off: whole-number sizes so pixels stay crisp. On: any size."
+              className={toolButtonClass(freeScale)}
+            >
+              Free scale
+            </button>
+            {onTogglePlaceAnywhere && (
+              <button
+                type="button"
+                onClick={onTogglePlaceAnywhere}
+                aria-pressed={placeAnywhere}
+                title="Host only: ignore each item's zone (floor / wall / ceiling / tabletop)"
+                className={toolButtonClass(placeAnywhere)}
+              >
+                Place anywhere
+              </button>
+            )}
+          </>
+        )}
       </div>
 
       <div className="flex gap-1 border-b-2 border-[#e0b8c8] p-2">
@@ -125,12 +194,15 @@ export default function EditPanel({
             {selected && (
               <SelectedItemToolbar
                 item={selected}
+                onStepScale={onStepScale}
+                onDuplicate={onDuplicate}
                 label={selected.kind === 'custom' ? customItems.find((i) => i.id === selected.assetId)?.name || 'Custom item' : selected.kind}
                 onUpdate={onUpdateSelected}
                 onDelete={onDeleteSelected}
                 onDeselect={() => onSelect(null)}
               />
             )}
+            {selected && hasDecorEditor(selected.kind) && <DecorEditor key={selected.id} item={selected} onUpdate={onUpdateSelected} />}
             {selected?.kind === 'cake' && <CakeEditor key={selected.id} item={selected} onUpdate={onUpdateSelected} age={age} />}
 
             <div>
@@ -307,37 +379,53 @@ function SelectedItemToolbar({
   onUpdate,
   onDelete,
   onDeselect,
+  onStepScale,
+  onDuplicate,
 }: {
   item: RoomObjectApi;
+  onStepScale: (dir: 1 | -1) => void;
+  onDuplicate: () => void;
   /** What to call the item: its catalog kind, or for a custom item the library name. */
   label: string;
   onUpdate: (patch: RoomObjectPatch) => void;
   onDelete: () => void;
   onDeselect: () => void;
 }) {
-  const step = 0.25;
   return (
-    <div className="flex flex-col gap-2 border-2 border-[#ff3d8b] bg-white p-2">
+    <div className="flex flex-col gap-2 border-2 border-[#ff3d8b] bg-white p-2" data-testid="object-toolbar">
       <div className="flex items-center justify-between">
         <span className="font-mono text-xs uppercase text-[#5e3620]/70">{label}</span>
         <button type="button" onClick={onDeselect} className="font-mono text-xs text-[#5e3620]">
           deselect
         </button>
       </div>
+      <p className="font-mono text-xs text-[#5e3620]" data-testid="object-readout">
+        scale {item.scale}× · x {Math.round(item.x)}, y {Math.round(item.y)} · {item.zone}
+      </p>
       <div className="flex flex-wrap gap-1">
         <button
           type="button"
-          onClick={() => onUpdate({ scale: Math.max(LIMITS.minObjectScale, item.scale - step) })}
-          className="border-2 border-[#5e3620] bg-[#fff6d5] px-2 py-1 font-mono text-xs text-[#5e3620]"
+          onClick={() => onStepScale(-1)}
+          disabled={item.scale <= LIMITS.minObjectScale}
+          className="border-2 border-[#5e3620] bg-[#fff6d5] px-2 py-1 font-mono text-xs text-[#5e3620] disabled:opacity-40"
         >
           Scale −
         </button>
         <button
           type="button"
-          onClick={() => onUpdate({ scale: Math.min(LIMITS.maxObjectScale, item.scale + step) })}
-          className="border-2 border-[#5e3620] bg-[#fff6d5] px-2 py-1 font-mono text-xs text-[#5e3620]"
+          onClick={() => onStepScale(1)}
+          disabled={item.scale >= LIMITS.maxObjectScale}
+          className="border-2 border-[#5e3620] bg-[#fff6d5] px-2 py-1 font-mono text-xs text-[#5e3620] disabled:opacity-40"
         >
           Scale +
+        </button>
+        <button
+          type="button"
+          onClick={onDuplicate}
+          title="Copy this item (Ctrl/Cmd+D)"
+          className="border-2 border-[#5e3620] bg-[#fff6d5] px-2 py-1 font-mono text-xs text-[#5e3620]"
+        >
+          Duplicate
         </button>
         <button type="button" onClick={() => onUpdate({ flipX: !item.flipX })} className="border-2 border-[#5e3620] bg-[#fff6d5] px-2 py-1 font-mono text-xs text-[#5e3620]">
           Flip

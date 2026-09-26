@@ -7,6 +7,7 @@ import { checkRateLimit, clientIp } from '@/server/rateLimit';
 import { isRoomUnlocked } from '@/server/lock';
 import { canMutateObjects, parsePermissions } from '@/server/permissions';
 import { UpdateObjectSchema } from '@/server/roomObjects';
+import { inZone } from '@/room/zones';
 
 function sessionHashFrom(req: NextRequest): string | undefined {
   const raw = req.headers.get('x-contributor-session');
@@ -47,6 +48,16 @@ export async function PATCH(
   const parsed = UpdateObjectSchema.safeParse(body);
   if (!parsed.success) {
     return jsonError(400, parsed.error.issues[0]?.message ?? 'Invalid update.');
+  }
+
+  // Zones: everyone but the host must keep the item inside its zone (a move that leaves it is
+  // refused, not silently clamped — the editor clamps client-side before sending).
+  if (role !== 'admin' && (parsed.data.x !== undefined || parsed.data.y !== undefined)) {
+    const nx = parsed.data.x ?? existing.x;
+    const ny = parsed.data.y ?? existing.y;
+    if (!inZone(existing.zone, nx, ny)) {
+      return jsonError(400, `That spot isn't valid for a ${existing.zone} item.`);
+    }
   }
 
   if (parsed.data.expectedUpdatedAt && parsed.data.expectedUpdatedAt !== existing.updatedAt.toISOString()) {

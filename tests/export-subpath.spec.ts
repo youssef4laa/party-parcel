@@ -115,6 +115,39 @@ test.describe('static export served from a subpath', () => {
     });
     expect(boxRes.ok()).toBeTruthy();
 
+    // --- 1b. Room Editor content that must survive the export: a restyled cake, a placed custom
+    // image (a plaintext asset — the one exported file that isn't encrypted or JSON), and a
+    // multi-gift box whose labels/wraps/goodies must stay encrypted. Placed off to the side so the
+    // ten-goodie box above stays the one the phone-sized clicks below reach. ---
+    const layout = (await (await request.get(`/api/rooms/${admin}/objects`)).json()).objects as Array<{ id: string; kind: string }>;
+    const cakeId = layout.find((o) => o.kind === 'cake')!.id;
+    const cakeRes = await request.patch(`/api/rooms/${admin}/objects/${cakeId}`, {
+      data: { configJson: JSON.stringify({ style: 'rainbow-layer', text: 'SUBPATH CAKE', candleMode: 'numbers', candleCount: 7 }) },
+    });
+    expect(cakeRes.ok(), await cakeRes.text()).toBeTruthy();
+    const customUpload = await request.post(`/api/rooms/${admin}/custom-items?source=import&name=subpath-custom`, {
+      data: await readFile(path.join(FIXTURES, 'tiny.png')),
+      headers: { 'Content-Type': 'image/png' },
+    });
+    expect(customUpload.ok(), await customUpload.text()).toBeTruthy();
+    const customId = (await customUpload.json()).item.id as string;
+    const customPlaced = await request.post(`/api/rooms/${admin}/objects`, {
+      data: { kind: 'custom', assetId: customId, x: 260, y: 640, zone: 'anywhere', scale: 4 },
+    });
+    expect(customPlaced.ok(), await customPlaced.text()).toBeTruthy();
+    const giftBox = await request.post(`/api/rooms/${contribute}/boxes`, {
+      data: {
+        fromName: 'Subpath Gift Sender',
+        design: { shape: 'flat', pattern: 'solid', baseColor: '#a679d6', accentColor: '#fff6d5', ribbon: 'cross', ribbonColor: '#ffd166', bow: 'classic', tag: 'none', tagText: '', sticker: 'none', topper: 'none', size: 'S' },
+        x: 100, y: 650, openInOrder: true,
+        gifts: [
+          { label: 'SUBPATH-GIFT-LABEL-ONE', design: { shape: 'tall', tagText: 'SUBPATH-GIFT-TAG' }, goodies: [{ type: 'note', text: 'SUBPATH-GIFT-GOODIE-ONE', sizeBytes: 10 }] },
+          { label: 'SUBPATH-GIFT-LABEL-TWO', design: {}, goodies: [{ type: 'note', text: 'SUBPATH-GIFT-GOODIE-TWO', sizeBytes: 10 }] },
+        ],
+      },
+    });
+    expect(giftBox.ok(), await giftBox.text()).toBeTruthy();
+
     // --- 2. Export it ---
     const parentDir = await mkdtemp(path.join(os.tmpdir(), 'export-subpath-'));
     const exportFolderName = 'my-party-parcel';
@@ -132,6 +165,8 @@ test.describe('static export served from a subpath', () => {
       'Subpath e2e note content', 'subpath e2e caption', 'Subpath e2e gift message',
       'SUBPATH-E2E-CODE', 'Subpath e2e landmark', 'Subpath e2e coupon title',
       'Subpath E2E Sender', 'SEALED TAG',
+      'SUBPATH-GIFT-LABEL-ONE', 'SUBPATH-GIFT-LABEL-TWO', 'SUBPATH-GIFT-TAG', 'SUBPATH-GIFT-GOODIE-ONE',
+      'SUBPATH-GIFT-GOODIE-TWO', 'Subpath Gift Sender', 'subpath-custom', // the custom image's library NAME never ships
     ];
     const exportedFiles = await listFilesRecursive(exportDir);
     for (const secret of secrets) {
@@ -177,6 +212,15 @@ test.describe('static export served from a subpath', () => {
       if (!box) throw new Error('room canvas did not render');
       const ROOM_HEIGHT = 760;
       const scale = box.height / ROOM_HEIGHT;
+      // The baked custom image was fetched from a RELATIVE path under the subfolder, and the page
+      // never asked a live-app route for anything.
+      const customRequests = requestLog.filter((u) => u.includes(`/${exportFolderName}/custom/`));
+      expect(customRequests, 'the placed custom image should load from <subfolder>/custom/').toEqual([
+        `${baseUrl}custom/${customId}.png`,
+      ]);
+      expect(requestLog.filter((u) => u.includes('/api/'))).toEqual([]);
+      console.log(`CHECK 0 (custom image): loaded ${customRequests[0].replace(baseUrl, './')} from the subfolder, no /api/ requests — PASS`);
+
       // The box was created at world (150, 600), anchored bottom-center — click just above its
       // base, comfortably inside its footprint.
       await roomEl.click({ position: { x: 150 * scale, y: 580 * scale } });
