@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { deleteBox, fetchBoxes, unlockRoom, type PlacedBoxApi, type RoomInfo } from './api';
+import { deleteBox, exportSealedCopy, fetchBoxes, unlockRoom, type PlacedBoxApi, type RoomInfo } from './api';
 
 /**
  * Minimal host admin surface so Milestone 4's unlock + box-removal logic is actually testable.
@@ -22,6 +22,10 @@ export default function AdminPanel({
   const [boxes, setBoxes] = useState<PlacedBoxApi[]>([]);
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(true);
+  const [exportPassword, setExportPassword] = useState('');
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [exported, setExported] = useState<string | null>(null);
 
   async function refresh() {
     setBoxes(await fetchBoxes(token));
@@ -42,6 +46,31 @@ export default function AdminPanel({
       onRoomChange();
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleExport(e: React.FormEvent) {
+    e.preventDefault();
+    setExporting(true);
+    setExportError(null);
+    setExported(null);
+    try {
+      const { blob, filename } = await exportSealedCopy(token, exportPassword);
+      // hand the zip to the browser as an ordinary download
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      setExported(filename);
+      setExportPassword(''); // never keep the password around once it has been used
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : 'The export failed.');
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -110,6 +139,38 @@ export default function AdminPanel({
         ))}
         {boxes.length === 0 && <li className="font-mono text-sm italic text-[#5e3620]/60">No presents yet.</li>}
       </ul>
+
+      <form onSubmit={handleExport} className="mt-3 flex flex-col gap-1.5 border-t-2 border-[#e0b8c8] pt-3" aria-label="Export a sealed copy">
+        <h3 className="font-mono text-xs uppercase text-[#5e3620]/70">Export a sealed copy</h3>
+        <p className="font-mono text-[11px] leading-snug text-[#5e3620]/80">
+          Downloads the room as a folder you can host anywhere, with no server. Every present is locked
+          with the password below — it&apos;s the only lock, so share it separately from the link.
+          Decorations and imported pictures are <strong>not</strong> locked.
+        </p>
+        <label className="flex flex-col gap-1 font-mono text-xs text-[#5e3620]">
+          Password (12+ characters)
+          <input
+            type="password"
+            value={exportPassword}
+            onChange={(e) => setExportPassword(e.target.value)}
+            autoComplete="new-password"
+            className="border-2 border-[#e0b8c8] bg-white px-2 py-1 text-sm"
+          />
+        </label>
+        <button
+          type="submit"
+          disabled={exporting || !exportPassword}
+          className="w-full border-2 border-[#5e3620] bg-[#fff6d5] px-2 py-1 font-mono text-sm text-[#5e3620] disabled:opacity-50"
+        >
+          {exporting ? 'Building… this can take a minute' : 'Download sealed copy (.zip)'}
+        </button>
+        {exportError && (
+          <p role="alert" className="font-mono text-xs text-[#d1266a]">
+            {exportError}
+          </p>
+        )}
+        {exported && <p className="font-mono text-xs text-[#5e3620]">Downloaded {exported}. Unzip it and put the folder on any static host.</p>}
+      </form>
     </div>
   );
 }

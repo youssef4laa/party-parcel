@@ -423,3 +423,23 @@ export async function deleteCustomItem(token: string, sessionToken: string | und
   });
   return asJson<{ ok: true; removedObjects: number }>(res);
 }
+
+/**
+ * Host panel "Export a sealed copy": asks the server to build the sealed static site and returns it
+ * as a zip Blob (plus the filename the server suggested). Throws the server's own message on refusal
+ * (weak password, not the host, another export running).
+ */
+export async function exportSealedCopy(token: string, password: string) {
+  const res = await fetch(`/api/rooms/${token}/export`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? `Export failed (${res.status})`);
+  }
+  const disposition = res.headers.get('Content-Disposition') ?? '';
+  const filename = /filename="([^"]+)"/.exec(disposition)?.[1] ?? 'party-parcel.zip';
+  return { blob: await res.blob(), filename };
+}

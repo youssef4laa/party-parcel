@@ -1,9 +1,30 @@
 # Party Parcel
 
-A web app where a Host builds a cozy pixel-art birthday room, friends pack and design gift boxes
-and drop them into the room, and the Celebrant unwraps everything on the big day. See
-[docs/brief.md](docs/brief.md) for the full brief and [DECISIONS.md](DECISIONS.md) for every
-choice made where that brief was silent.
+**Build a cozy pixel-art room for someone's birthday, let friends fill it with presents, and lock it
+until the big day.**
+
+A *host* decorates a pixel-art party room. *Friends* open a link, pack a gift box (a note, photos, a
+song, a video, a voice message, a drawing, a coupon, a place on a map, a news clipping, or a gift
+message), design its wrapping, and drop it in the room. Everything stays sealed until the birthday —
+the server itself refuses to hand out any contents early. Then the *celebrant* opens their link and
+unwraps everything. The host can also download a **sealed, fully static copy** of the room to keep or
+give away.
+
+- **Presents**: ten kinds of goodies, a pixel-art box designer (shape, pattern, ribbon, bow, tag, size),
+  several separately wrapped gifts in one box, an optional "open in order".
+- **A room you can decorate**: 40 catalog items to add (furniture, plants, glowing lights, party decor),
+  every piece of the default room movable and resizable, a configurable birthday cake, your own imported
+  or hand-drawn pixel art, undo/redo, placement zones, touch support.
+- **Permissions**: the host decides what contributors and the celebrant may change; the server enforces it.
+- **Sealed export**: a folder (or one-click `.zip`) you can host anywhere, locked with a password, no
+  server needed.
+
+See [docs/brief.md](docs/brief.md) for the original brief, [DECISIONS.md](DECISIONS.md) for the reasoning
+behind every choice, and [HANDOFF.md](HANDOFF.md) for the current status and known gaps.
+
+> **Status.** The room, presents, locking, decorating and export all work and are covered by an
+> end-to-end test suite. What's *not* built yet: a host sign-up/payment flow (you create rooms from the
+> terminal for now — see below), transactional email, and an admin page beyond the small host panel.
 
 ## Setup
 
@@ -14,7 +35,7 @@ npx prisma migrate dev
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The homepage is a client-side demo room
+Requires Node.js 20+. Open [http://localhost:3000](http://localhost:3000). The homepage is a client-side demo room
 (no server data); real, persisted rooms live at token-scoped links (`/r/[token]`) — see
 `POST /api/dev/seed-room` (development only) for a way to create one without the full host/payment
 flow.
@@ -298,6 +319,14 @@ npm run export:gift -- --admin <adminLinkToken> --password "a strong password" -
 
 (Omit `--admin`/`--password` and the script will prompt for them instead.)
 
+**Or use the button.** The host's page has an **Export a sealed copy** form in the Host panel: enter
+the password, click **Download sealed copy (.zip)**, unzip it, and put the folder on any static host.
+It produces exactly what the command above does. It builds the site on your server, so it needs
+Node — it works when you self-host (`npm run dev`, or `npm run build && npm start`). In production,
+run `npm run build:export-site` once at deploy time (the bundle is reused after that; it needs the dev
+dependencies installed at build time). On a serverless host with no writable disk, run the command from
+your own machine instead.
+
 **How the lock works**: every box's goodies, media, sender name, and gift-tag text are
 individually encrypted with AES-256-GCM, using a key derived from your password via PBKDF2
 (600,000 iterations — see `src/export/cryptoFormat.ts`). Only a box's *cosmetic appearance*
@@ -353,6 +382,22 @@ Open Font License that explicitly permits this; the license text ships alongside
 The export also works correctly when served from a subpath (e.g. `example.com/my-export/`, not
 just a domain root) — asset paths are relative, and a `.nojekyll` file is included for GitHub
 Pages.
+
+## Deploying your own
+
+This is a standard Next.js app with a SQLite database (Prisma) and local-disk or S3/R2 storage — see
+`.env.example`. Set a strong `ASSET_SIGNING_SECRET`. The `/api/dev/seed-room` helper is disabled when
+`NODE_ENV=production`, so a real deployment needs its own way of creating rooms (the host sign-up flow
+is the next milestone — see [HANDOFF.md](HANDOFF.md)). Room links are unguessable bearer tokens: anyone
+who has one has that link's rights, so treat them like passwords.
+
+## License
+
+Party Parcel is free software under the **GNU Affero General Public License v3.0** — see
+[LICENSE](LICENSE). In plain terms: you can use, study, change and share it, but if you run a modified
+version as a service for other people you must offer them the source of your changes under the same
+license. The pixel fonts bundled with the static export (Press Start 2P, VT323) are separately licensed
+under the SIL Open Font License; their license text ships in the export's `fonts-license/` folder.
 
 ## Learn more
 

@@ -76,6 +76,10 @@ async function openRoom(page: Page, admin: string) {
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
   await page.goto(`/r/${admin}`);
   await expect(page.getByText(/Drag, scroll, or use/)).toBeVisible();
+  // The host panel is an opaque HTML overlay over the room's top-left, and it grows whenever the panel
+  // gains a section (it now holds the export form) — collapse it so it can never cover an item the
+  // screenshot comparisons below are looking at.
+  await page.getByRole('button', { name: 'Collapse' }).click();
   await page.waitForTimeout(800);
   const box = (await page.getByRole('application', { name: 'Party room' }).boundingBox())!;
   return { errors, box, scale: box.height / ROOM_HEIGHT };
@@ -83,7 +87,6 @@ async function openRoom(page: Page, admin: string) {
 
 // [key, centre x, base y, width, height] in world px (art grid size x 4). Three clear rows; rugs on their own.
 const CELLS: Array<[string, number, number, number, number]> = [
-  // (x >= ~330: the host panel is an opaque HTML overlay over the room's top-left corner)
   ['palm', 90, 250, 104, 184], ['hanging-plant', 345, 190, 56, 120], ['spotlight', 470, 190, 56, 128],
   ['poster', 590, 200, 64, 88], ['poster-cake', 710, 200, 64, 88], ['dresser', 850, 250, 96, 88],
   ['candles', 980, 250, 64, 64], ['flower-pots', 1120, 250, 88, 56],
