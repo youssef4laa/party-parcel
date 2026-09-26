@@ -321,7 +321,8 @@ npm run export:gift -- --admin <adminLinkToken> --password "a strong password" -
 
 **Or use the button.** The host's page has an **Export a sealed copy** form in the Host panel: enter
 the password, click **Download sealed copy (.zip)**, unzip it, and put the folder on any static host.
-It produces exactly what the command above does. It builds the site on your server, so it needs
+It produces exactly what the command above does. The password is sent to *your* server to build the
+export, so use it over HTTPS (or locally); it isn't stored or logged. It builds the site on your server, so it needs
 Node — it works when you self-host (`npm run dev`, or `npm run build && npm start`). In production,
 run `npm run build:export-site` once at deploy time (the bundle is reused after that; it needs the dev
 dependencies installed at build time). On a serverless host with no writable disk, run the command from
